@@ -1,0 +1,104 @@
+use crate::messengers::telegram::TelegramMessenger;
+use crate::messengers::vk::VkMessenger;
+use crate::messengers::Messenger;
+use crate::models::{Platform, SendMessageRequest, UnifiedMessage};
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub struct MessengerGateway {
+    tg: Arc<TelegramMessenger>,
+    vk: Arc<VkMessenger>,
+}
+
+impl MessengerGateway {
+    pub fn new() -> Self {
+        Self {
+            tg: Arc::new(TelegramMessenger::new()),
+            vk: Arc::new(VkMessenger::new()),
+        }
+    }
+
+    pub async fn send(&self, platform: Platform, request: SendMessageRequest) -> Result<(), String> {
+        match platform {
+            Platform::Telegram => self.tg.send_message(&request).await,
+            Platform::VK => self.vk.send_message(&request).await,
+        }
+    }
+
+    pub async fn send_text(
+        &self,
+        platform: Platform,
+        chat_id: impl Into<String>,
+        text: impl Into<String>,
+        reply_to_message_id: Option<String>,
+    ) -> Result<(), String> {
+        let request = SendMessageRequest {
+            chat_id: chat_id.into(),
+            text: text.into(),
+            reply_to_message_id,
+        };
+        self.send(platform, request).await
+    }
+
+    pub async fn start_inbound_polling<H>(&self, handler: H)
+    where
+        H: InboundHandler + Send + Sync + 'static,
+    {
+        let handler = Arc::new(handler);
+
+        // --- TELEGRAM ---
+        let tg = self.tg.clone();
+        let h_tg = handler.clone();
+        tokio::spawn(async move {
+            let _ = tg.ensure_polling_mode().await;
+            let mut offset: i64 = 0;
+            loop {
+                match tg.fetch_messages(offset).await {
+                    Ok((messages, new_offset)) => {
+                        for msg in messages {
+                            h_tg.handle_inbound_message(msg).await;
+                        }
+                        if new_offset > offset {
+                            offset = new_offset;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[TG Gateway Error] {}", e);
+                        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    }
+                }
+            }
+        });
+
+        // --- VK ---
+        let vk = self.vk.clone();
+        let h_vk = handler;
+        tokio::spawn(async move {
+            let mut offset: i64 = 0;
+            loop {
+                match vk.fetch_messages(offset).await {
+                    Ok((messages, new_offset)) => {
+                        for msg in messages {
+                            h_vk.handle_inbound_message(msg).await;
+                        }
+                        if new_offset > offset {
+                            offset = new_offset;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[VK Gateway Error] {}", e);
+                        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    }
+                }
+            }
+        });
+    }
+}
+
+#[allow(async_fn_in_trait)]
+pub trait InboundHandler: Send + Sync {
+    fn handle_inbound_message(
+        &self,
+        message: UnifiedMessage,
+    ) -> impl std::future::Future<Output = ()> + Send;
+}

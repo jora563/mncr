@@ -1,0 +1,289 @@
+-- THIS IS THE MYSQL SCHEMA.
+-- Either a platform, or an instance of a platform.
+CREATE TABLE platform
+(
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    -- CAN BE UNSIGNED IF THAT IS MORE EFFICIENT
+    -- It is linked to a hardcoded ENUM for each api.
+    -- We do not need a separate table for API types and description.
+    api_id SMALLINT UNSIGNED NOT NULL COMMENT "Внутренний идентификатор АПИ мессенджера с которым работаем",
+    -- The name should be the platform.name by default, using the official
+    -- messenger API name as a fallback.
+    `name` VARCHAR(255) COMMENT "Наименование платформы",
+    created_on DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) COMMENT "Когда создана запись",
+    altered_on DATETIME(3) COMMENT "Когда изменена запись"
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- The API host url is recorded in a separate table, since each instance can have multiple
+-- addresses (eg proxies).
+CREATE TABLE platform_mirror
+(
+    platform_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор платформы из таблицы `platform`",
+    `url` VARCHAR(255) NOT NULL COMMENT "Базовый URL платформы, к которому крепятся запросы",
+    -- A possible note on the purpose of the this mirror link.
+    note VARCHAR(1023) COMMENT "Замечания об этом URL (на пример основной прокси платформы Икс для компании Игрек)",
+
+    FOREIGN KEY (platform_id) REFERENCES platform(id) ON DELETE RESTRICT,
+    UNIQUE KEY (platform_id, `url`),
+    INDEX (platform_id),
+    INDEX (`url`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Represents a group of projects that can share user data. Usually
+-- this is an organization or a division of an organization.
+-- FOR NOW I do not see a need for further nesting of the project structure.
+CREATE TABLE project_group
+(
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    -- Perhaps VARBINARY is better here. Not sure whether this should be obligatory.
+    external_id VARCHAR(255) COMMENT "Внешний идентификатор группы проектов (на пример по системе заказчика).",
+    -- Not sure whether this should be obligatory.
+    group_name VARCHAR(255) COMMENT "Наименование группы проектов",
+    created_on DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) COMMENT "Когда создана запись",
+    altered_on DATETIME(3) COMMENT "Когда изменена запись",
+
+    UNIQUE KEY(external_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE project
+(
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    project_group_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор группы проектов из таблицы `project_group`",
+    -- Perhaps VARBINARY is better here. Not sure whether this should be obligatory.
+    external_id VARCHAR(255) COMMENT "Внешний идентификатор проекта (на пример по системе заказчика).",
+    -- Not sure whether this should be obligatory.
+    project_name VARCHAR(255) COMMENT "Наименование проекта",
+    created_on DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) COMMENT "Когда создана запись",
+    altered_on DATETIME(3) COMMENT "Когда изменена запись",
+
+    UNIQUE KEY(external_id),
+    FOREIGN KEY (project_group_id) REFERENCES project_group(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- This links a project to permitted platforms.
+-- We may, or may not wish to add indexes on both fields.
+-- For now I have not to avoid premature optimization.
+-- The platforms can also be listed in a vector field in the "project" table
+-- as this can, in __certain__ cases improve DB performance.
+CREATE TABLE project_platform(
+    project_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор проекта из таблицы `project`",
+    platform_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор платформы из таблицы `platform`",
+
+    FOREIGN KEY (project_id) REFERENCES project(id) ON DELETE RESTRICT,
+    FOREIGN KEY (platform_id) REFERENCES platform(id) ON DELETE RESTRICT,
+    UNIQUE KEY (project_id, platform_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- This represents a chat user as defined by the omni-ai platform.
+-- It exists to keep track of all of a users accounts, chats and messages.
+-- However, not all of a user's data is available to all platforms.
+-- TODO: Do we need a separate table of user phones? Especially, if the user
+-- represents an organisation, there is a chance of multiple phone numbers.
+CREATE TABLE user
+(
+    -- Internal ID of a user.
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    -- For now we tie user accounts together by phone.
+    -- It is possible that this should be associated with accounts rather than phones.
+    phone VARCHAR(63) NOT NULL COMMENT "Телефонный номер пользователя которым пользуемся как главным внешнем идентификатор",
+    -- User name or code.
+    designation VARCHAR(255) NOT NULL COMMENT "Наименование или код пользователя",
+
+    UNIQUE KEY (phone)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- This represents basic user data by which a project can identify a user.
+-- And is important to partitioning user information.
+-- For now we run ONE to MANY (user to project_user).
+CREATE TABLE project_user
+(
+    user_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор пользователя из таблицы `user`",
+    project_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор проекта из таблицы `project`",
+    external_id VARCHAR(255) NOT NULL COMMENT "Внешний идентификатор пользователя в рамках проекта (предполагается по системе заказчика).",
+    created_on DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) COMMENT "Когда создана запись",
+    altered_on DATETIME(3) COMMENT "Когда изменена запись",
+
+    UNIQUE KEY (user_id, project_id),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE RESTRICT,
+    FOREIGN KEY (project_id) REFERENCES project(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Specifically a user account. We might not actually need this table,
+-- but depending on the exact manner in which we handle our chats it may be useful.
+CREATE TABLE user_account
+(
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    platform_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор платформы из таблицы `platform`",
+    user_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор пользователя из таблицы `user`",
+    -- The id that identifies the user in the platform.
+    external_id VARCHAR(255) NOT NULL COMMENT "Внешний идентификатор учетной записи пользователя в данной платформе.",
+    -- Internal designation or alias that the user uses on this account.
+    alias VARCHAR(255) NOT NULL COMMENT "Aлиас/кличка пользователя для этой учётной записи",
+
+    UNIQUE KEY uk_acc (platform_id, external_id),
+    FOREIGN KEY (platform_id) REFERENCES platform(id) ON DELETE RESTRICT,
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- We might not strictly need this for users, but we certainly need this
+-- for bots.
+-- We should probably decide whether bots and users can live in the same
+-- table, or whether they truly require different tables.
+-- A bot can belong to multiple projects. There may be problems with shared user
+-- data in this case.
+CREATE TABLE bot_account
+(
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    platform_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор идентификатор платформы из таблицы `platform`",
+    external_id VARCHAR(255) NOT NULL COMMENT "Внешний идентификатор учётной записи бота на данной платформе.",
+    token VARBINARY(512) NOT NULL COMMENT "Токен авторизации в учетную запись бота.",
+
+    UNIQUE KEY uk_acc (platform_id, external_id),
+    FOREIGN KEY (platform_id) REFERENCES platform(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- This applies to users for now.
+CREATE TABLE user_account_project
+(
+    account_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор учётной записи пользователя из таблицы `user_account`",
+    project_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор проекта из таблицы `project`",
+
+    UNIQUE KEY (account_id, project_id),
+    FOREIGN KEY (project_id) REFERENCES project(id) ON DELETE RESTRICT,
+    FOREIGN KEY (account_id) REFERENCES user_account(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- This applies to users for now.
+CREATE TABLE bot_account_project
+(
+    account_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор учётный записи бота из таблицы `bot_account`",
+    project_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор проекта из таблицы `project`",
+
+    UNIQUE KEY (account_id, project_id),
+    FOREIGN KEY (project_id) REFERENCES project(id) ON DELETE RESTRICT,
+    FOREIGN KEY (account_id) REFERENCES bot_account(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- This refers to a single messenger chat between a customer and a bot in a single
+-- messenger
+CREATE TABLE messenger_chat
+(
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    -- Do we also need a bot account id, or does each project only have a single bot?
+    user_account_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор учётной записи пользователя из таблицы `user_account`",
+    bot_account_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор учётный записи бота из таблицы `bot_account`",
+    project_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор идентификатор проекта из таблицы `project`",
+    platform_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор идентификатор платформы из таблицы `platform`",
+    started_on DATETIME(3) NOT NULL COMMENT "Когда начата переписка с ботом",
+    -- We do not need a "closed" field, since we can check "closed_on IS NULL".
+    closed_on DATETIME(3) COMMENT "Когда закончена переписка с ботом",
+    latest_post_on DATETIME(3) COMMENT "Когда было отправлено последние сообщение по этому чату",
+
+    UNIQUE KEY (user_account_id, project_id, platform_id),
+    FOREIGN KEY (project_id) REFERENCES project(id) ON DELETE RESTRICT,
+    FOREIGN KEY (platform_id) REFERENCES platform(id) ON DELETE RESTRICT,
+    FOREIGN KEY (bot_account_id) REFERENCES bot_account(id) ON DELETE RESTRICT,
+    FOREIGN KEY (user_account_id) REFERENCES user_account(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- This refers to a single topic of discussion/query ("обращение"), and covers a single
+-- appeal/request/query by a customer to the bot. It can span several different messengers
+-- but "expires"/"closes" once the handling is complete.
+CREATE TABLE query_ticket
+(
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    -- generated by somehow.
+    user_ticket_number INTEGER NOT NULL COMMENT "Человеко-читабельный номер тикета/темы для пользователя",
+    user_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор пользователя из таблицы `user`",
+    project_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор проекта из таблицы `project`",
+    -- currently proposed schema (for now):
+    -- 0=ongoing,
+    -- 1=escalation-ongoing, (we might not need this one)
+    -- 2=closed-ok,
+    -- 3=closed-no-resolution,
+    -- 4=closed-after-escalation
+    close_status SMALLINT NOT NULL COMMENT "С каким статусом закрыт тикет 0=ongoing, 1=escalation-ongoing, 2=closed-ok, 3-closed-no-resolution, 4=closed-after-escalation",
+    started_on DATETIME(3) NOT NULL COMMENT "Когда открыта тикет/тема",
+    -- We do not need a "closed" field, since we can check "closed_on IS NULL".
+    closed_on DATETIME(3) COMMENT "Когда закрыт тикет/тема",
+    latest_post_on DATETIME(3) COMMENT "Когда было отправлено последние сообщение по этому чату",
+    -- A summary of the topic of the ticket. This is useful if the ticket is
+    -- passed to a human operator, or when the ticket is loaded up initially.
+    topic VARCHAR(1023) COMMENT "Краткое описание темы/тикета",
+
+    UNIQUE KEY (user_ticket_number, user_id),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE RESTRICT,
+    FOREIGN KEY (project_id) REFERENCES project(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- A single messenger chat can be dealing with multiple query tickets,
+-- A single ticket can be spread over multiple chats.
+CREATE TABLE query_ticket_chat
+(
+    query_ticket_id BIGINT UNSIGNED COMMENT "Идентификатор тикета/темы из таблицы `query_ticket`",
+    messenger_chat_id BIGINT UNSIGNED COMMENT "Идентификатор чата из таблицы `messenger_chat`",
+
+    UNIQUE KEY (query_ticket_id, messenger_chat_id),
+    FOREIGN KEY (query_ticket_id) REFERENCES query_ticket(id) ON DELETE RESTRICT,
+    FOREIGN KEY (messenger_chat_id) REFERENCES messenger_chat(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE message
+(
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_account_id BIGINT UNSIGNED COMMENT "Идентификатор учётной записи пользователя из таблицы `user_account`",
+    bot_account_id BIGINT UNSIGNED COMMENT "Идентификатор учётной записи бота из таблицы `bot_account`",
+    -- let's not enum yet at the DB level.
+    -- direction ENUM('a', 'b') NOT NULL,
+    `type` SMALLINT UNSIGNED NOT NULL,
+    -- ID of the message in the messenger's own system
+    external_id VARCHAR(64) NOT NULL COMMENT "Внешний идентификатор сообщения в чате данной платформы.",
+    -- In theory messenger_chat_id and query_ticket_id can be placed
+    -- into a separate table with (message_id, messenger_chat_id, query_ticket_id)
+    -- but this is probably excessive normalization.
+    messenger_chat_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор чата из таблицы `messenger_chat`",
+    query_ticket_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор тикета/темы из таблицы `query_ticket`",
+    -- Probably should be limited, but with a very big limit.
+    content TEXT COMMENT "Текст сообщения",
+    edited BOOLEAN NOT NULL COMMENT "Изменено ли сообщение",
+    deleted BOOLEAN NOT NULL COMMENT "Удалено ли сообщение",
+    created_on DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+
+    FOREIGN KEY (user_account_id) REFERENCES user_account(id) ON DELETE RESTRICT,
+    FOREIGN KEY (bot_account_id) REFERENCES bot_account(id) ON DELETE RESTRICT,
+    FOREIGN KEY (messenger_chat_id) REFERENCES messenger_chat(id) ON DELETE RESTRICT,
+    FOREIGN KEY (query_ticket_id) REFERENCES query_ticket(id) ON DELETE RESTRICT,
+    -- Possibly bot and user accounts should be equivalent.
+    UNIQUE KEY uk_msg (user_account_id, bot_account_id, external_id)
+    -- TODO: Think about history for later.
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE attachment
+(
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    message_id BIGINT UNSIGNED NOT NULL COMMENT "Идентификатор сообщения из таблицы `message`",
+    -- Let's not assign values to the enum YET.
+    -- type ENUM('photo', 'file') NOT NULL,
+    `type` SMALLINT UNSIGNED NOT NULL COMMENT "Тип приложения: Файл или фотография",
+    external_id VARCHAR(64) NOT NULL COMMENT "Идентификатор приложения во внутренней системе мессенджера",
+    file_url VARCHAR(1024) COMMENT "URL вложенного файла в системе мессенджера",
+    file_size BIGINT UNSIGNED COMMENT "Размер вложенного файла в байтах",
+    created_on DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3) COMMENT "Когда создана запись",
+
+    FOREIGN KEY (message_id) REFERENCES message(id) ON DELETE RESTRICT,
+    INDEX idx_by_msg (message_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Like user, but for bots. Fundamentally compatible with user,
+-- but has different table links.
+CREATE TABLE bot
+(
+    -- Internal ID of a user.
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    -- User name or code.
+    designation VARCHAR(255) NOT NULL COMMENT "Наименование или код бота",
+    -- A bot may be linked with a bot account, or can be disconnected.
+    bot_account_id BIGINT UNSIGNED COMMENT "Идентификатор учётной записи бота из таблицы `bot_account`",
+
+    FOREIGN KEY (bot_account_id) REFERENCES bot_account(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

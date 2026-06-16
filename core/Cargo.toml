@@ -1,0 +1,19 @@
+[package]
+name = "ai-omni-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chat = { path = "../libs/chat" }
+db = { path = "../libs/db" }
+llm = { path = "../libs/llm" }
+queue = { path = "../libs/queue" }
+
+sqlx.workspace = true
+tokio = { workspace = true, features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+] }
+serde_json = { workspace = true }

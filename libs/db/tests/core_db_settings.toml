@@ -1,0 +1,11 @@
+max_connections = 20
+min_connections = 4
+max_no_log_connections = 2
+acquire_timeout_s = 30
+max_lifetime_s = 3600
+idle_timeout_s = 60
+db_host_url = "localhost"
+db_name = "ai_omni_test_db_0"
+migrations_home = "../../sql/core/"
+user = "root"
+pw = "password"
