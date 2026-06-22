@@ -10,6 +10,12 @@ pub enum DbError {
     ConfigParse(#[from] toml::de::Error),
     #[error("Error in Database: {0}")]
     RawSql(#[from] sqlx::Error),
+    #[error("{object} with `{field}` = {value} not found")]
+    NotFound {
+        object: &'static str,
+        field: &'static str,
+        value: String,
+    },
     #[error("Error in Database: {0}")]
     MigrateSql(#[from] sqlx::migrate::MigrateError),
     #[error("IO error: {0}")]
@@ -22,7 +28,7 @@ pub enum DbError {
     IncompatibleAccountPlatforms(String, i64, String, i64),
     #[error("User account ({0}) and chat platform incompatible ({1} vs {2}).")]
     IncompatibleUserChatPlatforms(String, i64, i64),
-    #[error("Bot account ({0}) chat platform incompatible {1} vs {2}).")]
+    #[error("Bot account ({0}) and chat platform incompatible ({1} vs {2}).")]
     IncompatibleBotChatPlatforms(String, i64, i64),
     #[error("Bot {0} does not belong to chat with id {1}")]
     AlienBot(String, i64),
@@ -46,6 +52,20 @@ impl DbError {
         Self::FailedValidation {
             entity: entity.into(),
             reason: reason.into(),
+        }
+    }
+
+    /// Создать вариант "не найдено"
+    pub(crate) fn not_found<T: std::fmt::Display>(
+        object: &'static str,
+        field: &'static str,
+        value: T,
+    ) -> Self {
+        let value = value.to_string();
+        Self::NotFound {
+            object,
+            field,
+            value,
         }
     }
 }

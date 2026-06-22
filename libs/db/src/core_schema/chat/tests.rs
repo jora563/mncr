@@ -242,7 +242,7 @@ async fn test_full_chat() {
 
             let started = time::macros::datetime!(2024-01-01 00:02);
             let chat_id = "XYZ-1000";
-            let chat = DbNewChat::new(
+            let mut chat = DbNewChat::new(
                 chat_id,
                 &user_account,
                 &bot_account,
@@ -254,13 +254,20 @@ async fn test_full_chat() {
             .await
             .unwrap();
 
+            let ch1 = DbChat::get_by_id(chat.pkey(), &pool).await.unwrap();
+            let ch2 = DbChat::get_by_external_id(&chat.external_id, &pool)
+                .await
+                .unwrap();
+            assert_eq!(ch1, chat);
+            assert_eq!(ch2, chat);
+
             moma::DbProjectUser::link(&project, &user, &pool)
                 .await
                 .unwrap();
             let started = time::macros::datetime!(2024-01-01 00:02);
             let topic = "Сломалась сенокосилка и унитаз";
-            let ticket = DbNewTicket::new(99_900_999, &user, &project, topic, started);
-            let ticket = ticket.insert(&pool).await.unwrap();
+            let ticket = DbNewTicket::new(&user, &project, topic, started);
+            let mut ticket = ticket.insert(&pool).await.unwrap();
 
             moma::DbTicketChat::link(&ticket, &chat, &pool)
                 .await
@@ -271,8 +278,8 @@ async fn test_full_chat() {
                 &user_account,
                 1,
                 "PWRR-001/M-0970",
-                &chat,
-                &ticket,
+                &mut chat,
+                &mut ticket,
                 content,
             )
             .unwrap()
@@ -296,8 +303,8 @@ async fn test_full_chat() {
                 &user_account,
                 1,
                 "PWRR-001/M-0970",
-                &chat,
-                &ticket,
+                &mut chat,
+                &mut ticket,
                 content,
             )
             .unwrap()
@@ -321,8 +328,8 @@ async fn test_full_chat() {
                 &user_account,
                 1,
                 "PWRR-001/M-0970",
-                &chat,
-                &ticket,
+                &mut chat,
+                &mut ticket,
                 content,
             )
             .unwrap()
@@ -431,9 +438,9 @@ async fn test_message_validate() {
                     .unwrap();
                 let started = time::macros::datetime!(2024-01-01 00:02);
                 let topic = "Сломалась сенокосилка и унитаз";
-                let ticket = DbNewTicket::new(99_900_999, &user, &project, topic, started);
-                let ticket2 = DbNewTicket::new(99_900_999, &user, &project2, topic, started);
-                let ticket = ticket.insert(&pool).await.unwrap();
+                let ticket = DbNewTicket::new(&user, &project, topic, started);
+                let ticket2 = DbNewTicket::new(&user, &project2, topic, started);
+                let mut ticket = ticket.insert(&pool).await.unwrap();
                 let ticket_err = ticket2.insert(&pool).await.unwrap_err();
 
                 // Мы не можем создать плохой тикет! :)
@@ -452,7 +459,7 @@ async fn test_message_validate() {
 
                 let started = time::macros::datetime!(2024-01-01 00:02);
                 let chat_id = "XYZ-1000";
-                let chat =
+                let mut chat =
                     DbNewChat::new(chat_id, &user_account, &bot_account, &project, &platform, started)
                         .insert(&pool)
                         .await
@@ -467,8 +474,8 @@ async fn test_message_validate() {
                     &user_account2,
                     1,
                     "PWRR-001/M-0970",
-                    &chat,
-                    &ticket,
+                    &mut chat,
+                    &mut ticket,
                     content,
                 )
                 .unwrap_err();
@@ -476,8 +483,8 @@ async fn test_message_validate() {
                     &bot_account2,
                     1,
                     "PWRR-001/M-0970",
-                    &chat,
-                    &ticket,
+                    &mut chat,
+                    &mut ticket,
                     content,
                 )
                 .unwrap_err();
@@ -485,8 +492,8 @@ async fn test_message_validate() {
                     &user_account3,
                     1,
                     "PWRR-001/M-0970",
-                    &chat,
-                    &ticket,
+                    &mut chat,
+                    &mut ticket,
                     content,
                 )
                 .unwrap_err();
@@ -494,8 +501,8 @@ async fn test_message_validate() {
                     &bot_account3,
                     1,
                     "PWRR-001/M-0970",
-                    &chat,
-                    &ticket,
+                    &mut chat,
+                    &mut ticket,
                     content,
                 )
                 .unwrap_err();
@@ -510,19 +517,19 @@ async fn test_message_validate() {
                 );
                 assert_eq!(
                     err3.to_string(),
-                    "Bot account (Red3) chat platform incompatible 2 vs 1)."
+                    "User account (Red3) and chat platform incompatible (2 vs 1)."
                 );
                 assert_eq!(
                     err4.to_string(),
-                    "User account (RB-890125) and chat platform incompatible (2 vs 1)."
+                    "Bot account (RB-890125) and chat platform incompatible (2 vs 1)."
                 );
 
                 DbNewMessage::new_user(
                     &user_account,
                     1,
                     "PWRR-001/M-0970",
-                    &chat,
-                    &ticket,
+                    &mut chat,
+                    &mut ticket,
                     content,
                 )
                 .unwrap()
@@ -530,7 +537,7 @@ async fn test_message_validate() {
                 .await
                 .unwrap();
 
-                DbNewMessage::new_bot(&bot_account, 1, "PWRR-001/M-0970", &chat, &ticket, content)
+                DbNewMessage::new_bot(&bot_account, 1, "PWRR-001/M-0970", &mut chat, &mut ticket, content)
                     .unwrap()
                     .insert(&pool)
                     .await
@@ -548,8 +555,8 @@ async fn test_message_validate() {
                     &user_account,
                     1,
                     "PWRR-001/M-0970",
-                    &chat,
-                    &ticket,
+                    &mut chat,
+                    &mut ticket,
                     content,
                 )
                 .unwrap()
@@ -561,8 +568,8 @@ async fn test_message_validate() {
                     &bot_account,
                     1,
                     "PWRR-001/M-0970",
-                    &chat,
-                    &ticket,
+                    &mut chat,
+                    &mut ticket,
                     content,
                 )
                 .unwrap()
@@ -612,15 +619,15 @@ async fn test_message_crud() {
                 moma::DbProjectUser::link(&project, &user, &pool).await.unwrap();
                 let started = time::macros::datetime!(2024-01-01 00:02);
                 let topic = "Сломалась сенокосилка и унитаз";
-                let ticket = DbNewTicket::new(99_900_999, &user, &project, topic, started);
-                let ticket = ticket.insert(&pool).await.unwrap();
+                let ticket = DbNewTicket::new(&user, &project, topic, started);
+                let mut ticket = ticket.insert(&pool).await.unwrap();
 
                 moma::DbUserAccountProject::link(&user_account, &project, &pool).await.unwrap();
                 moma::DbBotAccountProject::link(&bot_account, &project, &pool).await.unwrap();
 
                 let started = time::macros::datetime!(2024-01-01 00:02);
                 let chat_id = "XYZ-1000";
-                let chat = DbNewChat::new(chat_id, &user_account, &bot_account, &project, &platform, started)
+                let mut chat = DbNewChat::new(chat_id, &user_account, &bot_account, &project, &platform, started)
                     .insert(&pool)
                     .await
                     .unwrap();
@@ -628,7 +635,7 @@ async fn test_message_crud() {
                 moma::DbTicketChat::link(&ticket, &chat, &pool).await.unwrap();
 
                 let content = "Help me, help me! My lawnmower broke. It's the New Year and my lawnmower is broken!";
-                let msg = DbNewMessage::new_user(&user_account, 1, "PWRR-001/M-0970", &chat, &ticket, content).unwrap()
+                let msg = DbNewMessage::new_user(&user_account, 1, "PWRR-001/M-0970", &mut chat, &mut ticket, content).unwrap()
                 .insert(&pool).await.unwrap();
 
                 let att = DbNewAttachment::new(&msg, 1, "PWRR-001/F-0970", "http://rangergram.com/files/f-0970", 9979)
@@ -678,4 +685,119 @@ async fn test_message_crud() {
             },
         )
         .await
+}
+
+#[tokio::test]
+async fn test_full_message_single_and_many() {
+    crate::test_frame::run_test_postgres::<TestCfg, _>(
+        "tests/sql/postgres/",
+        "../../sql/core/",
+        "tests/sql/postgres/drop_core",
+        |pool| async move {
+                let platform = DbNewPlatform::new(ApiId::Vk, "Rangergram").insert(&pool).await.unwrap();
+                let user = DbNewUser::new("+79451234567", "The Red Ranger").insert(&pool).await.unwrap();
+
+                let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
+                let bot_account =
+                    DbNewBotAccount::new(&platform, "RB-890123", b"password".to_vec());
+
+                let user_account = user_account.insert(&pool).await.unwrap();
+                let bot_account = bot_account.insert(&pool).await.unwrap();
+
+                let project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+                    .insert(&pool)
+                    .await
+                    .unwrap();
+
+                let project = DbNewProject::new(&project_group, "AKUWDHWA-8691", "The Big Spam").insert(&pool).await.unwrap();
+
+                moma::DbProjectUser::link(&project, &user, &pool).await.unwrap();
+                let started = time::macros::datetime!(2024-01-01 00:02);
+                let topic = "Сломалась сенокосилка и унитаз";
+                let ticket = DbNewTicket::new(&user, &project, topic, started);
+                let mut ticket = ticket.insert(&pool).await.unwrap();
+
+                moma::DbUserAccountProject::link(&user_account, &project, &pool).await.unwrap();
+                moma::DbBotAccountProject::link(&bot_account, &project, &pool).await.unwrap();
+
+                let started = time::macros::datetime!(2024-01-01 00:02);
+                let chat_id = "XYZ-1000";
+                let mut chat = DbNewChat::new(chat_id, &user_account, &bot_account, &project, &platform, started)
+                    .insert(&pool)
+                    .await
+                    .unwrap();
+
+                moma::DbTicketChat::link(&ticket, &chat, &pool).await.unwrap();
+
+                let content = "Help me, help me! My lawnmower broke. It's the New Year and my lawnmower is broken!";
+                let msg = DbNewMessage::new_user(&user_account, 1, "PWRR-001/M-0970", &mut chat, &mut ticket, content).unwrap()
+                .insert(&pool).await.unwrap();
+                let msg2 = DbNewMessage::new_user(&user_account, 1, "PWRR-001/M-0971", &mut chat, &mut ticket, content).unwrap()
+                .insert(&pool).await.unwrap();
+                let msg3 = DbNewMessage::new_user(&user_account, 1, "PWRR-001/M-0972", &mut chat, &mut ticket, content).unwrap()
+                .insert(&pool).await.unwrap();
+                let msg4 = DbNewMessage::new_user(&user_account, 1, "PWRR-001/M-0972", &mut chat, &mut ticket, content).unwrap()
+                .insert(&pool).await.unwrap();
+
+                let att = DbNewAttachment::new(&msg, 1, "PWRR-001/F-0970", "http://rangergram.com/files/f-0970", 9979)
+                    .insert(&pool).await.unwrap();
+                let att2 = DbNewAttachment::new(&msg2, 1, "PWRR-001/F-0971", "http://rangergram.com/files/f-0971", 9979)
+                    .insert(&pool).await.unwrap();
+                let att3 = DbNewAttachment::new(&msg, 1, "PWRR-001/F-0972", "http://rangergram.com/files/f-0972", 9979)
+                    .insert(&pool).await.unwrap();
+                let att4 = DbNewAttachment::new(&msg2, 1, "PWRR-001/F-0973", "http://rangergram.com/files/f-0973", 9979)
+                    .insert(&pool).await.unwrap();
+                let att5 = DbNewAttachment::new(&msg, 1, "PWRR-001/F-0974", "http://rangergram.com/files/f-0974", 9979)
+                    .insert(&pool).await.unwrap();
+                let att6 = DbNewAttachment::new(&msg3, 1, "PWRR-001/F-0975", "http://rangergram.com/files/f-0975", 9979)
+                    .insert(&pool).await.unwrap();
+                let att7 = DbNewAttachment::new(&msg3, 1, "PWRR-001/F-0976", "http://rangergram.com/files/f-0976", 9979)
+                    .insert(&pool).await.unwrap();
+                let att8 = DbNewAttachment::new(&msg3, 1, "PWRR-001/F-0977", "http://rangergram.com/files/f-0977", 9979)
+                    .insert(&pool).await.unwrap();
+                let att9 = DbNewAttachment::new(&msg3, 1, "PWRR-001/F-0978", "http://rangergram.com/files/f-0978", 9979)
+                    .insert(&pool).await.unwrap();
+
+                let full_msg = msg.clone().get_files(&pool).await.unwrap();
+                let full_msg2 = msg2.clone().get_files(&pool).await.unwrap();
+                let full_msg3 = msg3.clone().get_files(&pool).await.unwrap();
+                let full_msg4 = msg4.clone().get_files(&pool).await.unwrap();
+
+                assert_eq!(full_msg.message, msg);
+                assert_eq!(full_msg.files.len(), 3);
+                assert_eq!(full_msg.files[0], att);
+                assert_eq!(full_msg.files[1], att3);
+                assert_eq!(full_msg.files[2], att5);
+
+                assert_eq!(full_msg2.message, msg2);
+                assert_eq!(full_msg2.files.len(), 2);
+                assert_eq!(full_msg2.files[0], att2);
+                assert_eq!(full_msg2.files[1], att4);
+
+                assert_eq!(full_msg3.message, msg3);
+                assert_eq!(full_msg3.files.len(), 4);
+                assert_eq!(full_msg3.files[0], att6);
+                assert_eq!(full_msg3.files[1], att7);
+                assert_eq!(full_msg3.files[2], att8);
+                assert_eq!(full_msg3.files[3], att9);
+
+                assert_eq!(full_msg4.message, msg4);
+                assert!(full_msg4.files.is_empty());
+
+                let msgs_t = DbFullMessage::get_for_ticket(ticket.pkey(), &pool).await.unwrap();
+                let msgs_ch = DbFullMessage::get_for_chat(chat.pkey(), &pool).await.unwrap();
+
+                assert_eq!(msgs_t, msgs_ch);
+
+                assert_eq!(msgs_t.len(), 4);
+
+                assert_eq!(msgs_t[0], full_msg);
+                assert_eq!(msgs_t[1], full_msg2);
+                assert_eq!(msgs_t[2], full_msg3);
+                assert_eq!(msgs_t[3], full_msg4);
+
+            Ok(())
+        },
+    )
+    .await
 }

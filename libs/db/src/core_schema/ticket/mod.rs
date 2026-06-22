@@ -14,6 +14,7 @@ pub struct DbTicket {
     #[core_db_skip_insert]
     id: i64,
     /// Человеко-читабельный номер тикета/темы для пользователя
+    #[core_db_skip_insert]
     pub user_ticket_number: i32,
     /// Ид пользователя.
     pub user_id: i64,
@@ -41,7 +42,6 @@ pub struct DbNewTicket<'a, 'b> {
 
 impl<'a, 'b> DbNewTicket<'a, 'b> {
     pub fn new(
-        ticket_no: i32,
         user: &'a DbUser,
         project: &'b DbProject,
         topic: &str,
@@ -49,7 +49,7 @@ impl<'a, 'b> DbNewTicket<'a, 'b> {
     ) -> Self {
         let ticket = DbTicket {
             id: 0,
-            user_ticket_number: ticket_no,
+            user_ticket_number: 0,
             user_id: user.pkey(),
             project_id: project.pkey(),
             close_status: 0,
@@ -102,8 +102,23 @@ impl DbTicket {
             messages,
         })
     }
+
+    /// Достать один тикет/тему по номеру который получает клиент.
+    /// Должна быть только одна.
+    #[tracing::instrument(skip_all)]
+    pub async fn get_by_ticket_no<'a, T: sqlx::PgExecutor<'a>>(
+        ticket_no: i32,
+        ex: T,
+    ) -> Result<Self> {
+        let res = Self::get_by_field("user_ticket_number", ticket_no, ex)
+            .await?
+            .pop()
+            .ok_or_else(|| DbError::not_found("DbTicket", "user_ticket_number", ticket_no))?;
+        Ok(res)
+    }
 }
 
+#[derive(Clone, Debug)]
 pub struct DbFullTicket {
     pub ticket: DbTicket,
     pub messages: Vec<DbFullMessage>,

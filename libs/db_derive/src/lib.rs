@@ -109,6 +109,31 @@ pub fn db_crud(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             pub async fn delete<'a, T: sqlx::PgExecutor<'a>>(&self, exc: T) -> crate::error::Result<()> {
                 Self::delete_by_id(self.pkey(), exc).await
             }
+
+            /// Достать по названому полю. Эта функция обязательно работает как внутренняя, те.е
+            /// ```ignore
+            /// pub async fn get_by_name(name: &str, ex: &DbPool) -> Result<Self> {
+            ///     get_by_field("name", name, ex).await
+            /// }
+            /// ```
+            ///
+            /// Внешнюю функцию обязательно надо тестировать. Такая функцию немного менее эффективная чем
+            /// остальные, так как строка запроса генерируется динамично.
+            pub(crate) async fn get_by_field<'a, V, T>(
+                field: &str,
+                v: V,
+                exc: T
+            ) -> crate::error::Result<Vec<Self>>
+            where T: sqlx::PgExecutor<'a>,
+                V: for<'q>sqlx::Encode<'q, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>
+            {
+                let query = format!("SELECT * FROM {} WHERE {field} = $1", Self::TABLE);
+                sqlx::query_as::<_, Self>(&query)
+                    .bind(v)
+                    .fetch_all(exc)
+                    .await
+                    .map_err(Into::into)
+            }
         }
     };
     proc_macro::TokenStream::from(tokens)

@@ -359,27 +359,9 @@ async fn setup_tickets_annex(s: &mut Setup, pool: &PgPool) {
     let topic2 = "Помогите найти сенокосилку которая не пугает котиков.";
     let topic3 = "Отвалилось колесо, надо его заменить.";
 
-    let ticket1 = DbNewTicket::new(
-        99_900_999,
-        &s.users[0],
-        &s.project_group.projects[0],
-        topic1,
-        started,
-    );
-    let ticket2 = DbNewTicket::new(
-        99_901_000,
-        &s.users[1],
-        &s.project_group.projects[0],
-        topic2,
-        started,
-    );
-    let ticket3 = DbNewTicket::new(
-        0,
-        &s.users[2],
-        &s.project_group.projects[1],
-        topic3,
-        started,
-    );
+    let ticket1 = DbNewTicket::new(&s.users[0], &s.project_group.projects[0], topic1, started);
+    let ticket2 = DbNewTicket::new(&s.users[1], &s.project_group.projects[0], topic2, started);
+    let ticket3 = DbNewTicket::new(&s.users[2], &s.project_group.projects[1], topic3, started);
 
     let ticket1 = ticket1.insert(pool).await.unwrap();
     let ticket2 = ticket2.insert(pool).await.unwrap();

@@ -5,24 +5,48 @@ members = [
     "libs/chat",
     "libs/db",
     "libs/llm",
-    "libs/queue"
+    "libs/llm_client",
+    "libs/queue",
 ]
 
+[workspace.package]
+edition = "2024"
+rust-version = "1.95.0"
+
 [workspace.dependencies]
-# пока версия sqlx 0.8.6, т.к последняя (0.9.0) ругается на возможные инъекции в динамичных sql строках
-sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres", "time"] }
 ahash = { version = "*" }
-thiserror = { version = "*" }
-quote = { version = "1.0" }
 proc-macro2 = { version = "*" }
-tracing = { version = "*" }
-time = { version = "*", features = ["macros", "formatting", "parsing", "serde"] }
-toml = { version = "1.1.2" }
-syn = { version = "2.0", features = ["full"] }
-tokio = { version = "*", features = ["full"] }
+quote = { version = "1.0" }
 reqwest = { version = "*", features = ["json", "form"] }
+sqlx = { version = "*", features = [
+    "postgres",
+    "runtime-tokio",
+    "time",
+] } # пока версия sqlx 0.8.6, т.к последняя (0.9.0) ругается на возможные инъекции в динамичных sql строках
 serde = { version = "*", features = ["derive"] }
 serde_json = { version = "*" }
+syn = { version = "2.0", features = ["full"] }
+thiserror = { version = "*" }
+time = { version = "*", features = [
+    "macros",
+    "formatting",
+    "parsing",
+    "serde",
+] }
+tokio = { version = "*", features = [
+    "macros",
+    "rt-multi-thread",
+    "sync",
+] } # Currently "1.52.3"
+tokio_util = "*" # Currently "0.7.18"
+toml = { version = "1.1.2" }
+tracing = { version = "*" } # "0.1.44"
+tracing-appender = { version = "*" } # "0.2.5"
+tracing-subscriber = { version = "*", features = [
+    "json",
+    "registry",
+] } # "0.3.23"
+
 
 [profile.release]
 opt-level = 3

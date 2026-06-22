@@ -124,6 +124,33 @@ async fn test_full_platform() {
             assert_eq!(fp.mirrors[1].url, m2.url);
             assert_eq!(fp.mirrors[2].url, m3.url);
             assert_eq!(fp.mirrors[3].url, m4.url);
+
+            let platform2 = DbNewPlatform::new(ApiId::Telegram, "pidgeon")
+                .insert(&pool)
+                .await
+                .unwrap();
+
+            // Alphabetically last, inserted first
+            DbNewPlatformMirror::new(&platform2, "wagon-pidgein.com", "")
+                .insert(&pool)
+                .await
+                .unwrap();
+            // Alphabetically first, inserted second
+            DbNewPlatformMirror::new(&platform2, "coo-coo.io", "")
+                .insert(&pool)
+                .await
+                .unwrap();
+
+            let all = DbFullPlatform::get_all(&pool).await.unwrap();
+
+            assert_eq!(all.len(), 2);
+            assert_eq!(all[0].mirrors.len(), 4);
+            assert_eq!(all[1].mirrors.len(), 2);
+            assert_eq!(all[0].platform.api_id, ApiId::Vk);
+            assert_eq!(&all[0].platform.name, "Wagongram");
+            assert_eq!(all[1].platform.api_id, ApiId::Telegram);
+            assert_eq!(&all[1].platform.name, "pidgeon");
+
             Ok(())
         },
     )

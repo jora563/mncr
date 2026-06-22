@@ -25,14 +25,14 @@ async fn test_validate_ticket() {
 
             let started = time::macros::datetime!(2024-01-01 00:02);
             let topic = "Сломалась сенокосилка и унитаз";
-            let new_ticket = DbNewTicket::new(99_900_999, &user, &project, topic, started);
+            let new_ticket = DbNewTicket::new(&user, &project, topic, started);
 
             assert_eq!(
                 new_ticket.insert(&pool).await.unwrap_err().to_string(),
                 "Cannot validate Ticket: User The Red Ranger not part of project The Big Spam."
             );
 
-            let new_ticket = DbNewTicket::new(99_900_999, &user, &project, topic, started);
+            let new_ticket = DbNewTicket::new(&user, &project, topic, started);
             moma::DbProjectUser::link(&project, &user, &pool)
                 .await
                 .unwrap();
@@ -64,7 +64,7 @@ async fn test_ticket_crud() {
 
             let started = time::macros::datetime!(2024-01-01 00:02);
             let topic = "Сломалась сенокосилка и унитаз";
-            let new_ticket = DbNewTicket::new(99_900_999, &user, &project, topic, started);
+            let new_ticket = DbNewTicket::new(&user, &project, topic, started);
 
             moma::DbProjectUser::link(&project, &user, &pool)
                 .await
@@ -131,7 +131,7 @@ async fn test_full_ticket() {
 
             let started = time::macros::datetime!(2024-01-01 00:02);
             let topic = "Сломалась сенокосилка и унитаз";
-            let new_ticket = DbNewTicket::new(99_900_999, &user, &project, topic, started);
+            let new_ticket = DbNewTicket::new(&user, &project, topic, started);
 
             moma::DbProjectUser::link(&project, &user, &pool)
                 .await
@@ -142,11 +142,18 @@ async fn test_full_ticket() {
             moma::DbBotAccountProject::link(&bot_account, &project, &pool)
                 .await
                 .unwrap();
-            let ticket = new_ticket.insert(&pool).await.unwrap();
+            let mut ticket = new_ticket.insert(&pool).await.unwrap();
+
+            let t1 = DbTicket::get_by_id(ticket.pkey(), &pool).await.unwrap();
+            let t2 = DbTicket::get_by_ticket_no(ticket.user_ticket_number, &pool)
+                .await
+                .unwrap();
+            assert_eq!(t1, ticket);
+            assert_eq!(t2, ticket);
 
             let started = time::macros::datetime!(2024-01-01 00:02);
             let chat_id = "XYZ-1000";
-            let chat = DbNewChat::new(
+            let mut chat = DbNewChat::new(
                 chat_id,
                 &user_account,
                 &bot_account,
@@ -166,8 +173,8 @@ async fn test_full_ticket() {
                 &user_account,
                 1,
                 "PWRR-001/M-0970",
-                &chat,
-                &ticket,
+                &mut chat,
+                &mut ticket,
                 content,
             )
             .unwrap()
@@ -191,8 +198,8 @@ async fn test_full_ticket() {
                 &user_account,
                 1,
                 "PWRR-001/M-0970",
-                &chat,
-                &ticket,
+                &mut chat,
+                &mut ticket,
                 content,
             )
             .unwrap()
@@ -216,8 +223,8 @@ async fn test_full_ticket() {
                 &user_account,
                 1,
                 "PWRR-001/M-0972",
-                &chat,
-                &ticket,
+                &mut chat,
+                &mut ticket,
                 content,
             )
             .unwrap()

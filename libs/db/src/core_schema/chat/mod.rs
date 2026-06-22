@@ -31,6 +31,20 @@ pub struct DbChat {
     pub closed_on: Option<PrimitiveDateTime>,
 }
 
+impl DbChat {
+    #[tracing::instrument(skip_all)]
+    pub async fn get_by_external_id<'a, T: sqlx::PgExecutor<'a>>(
+        ext_id: &str,
+        ex: T,
+    ) -> Result<Self> {
+        let res = Self::get_by_field("external_id", ext_id, ex)
+            .await?
+            .pop()
+            .ok_or_else(|| DbError::not_found("DbChat", "external_id", ext_id))?;
+        Ok(res)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct DbNewChat<'a> {
     chat: DbChat,

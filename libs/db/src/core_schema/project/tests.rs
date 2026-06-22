@@ -74,6 +74,11 @@ async fn test_project_crud() {
             let p2 = DbProject::get_by_id(id, &pool).await.unwrap();
             assert_eq!(p, p2);
 
+            let p2 = DbProject::get_by_external_id("AKUWDHWA-8691", &pool)
+                .await
+                .unwrap();
+            assert_eq!(p, p2);
+
             p.delete(&pool).await.unwrap();
             let err = DbProject::get_by_id(id, &pool).await.unwrap_err();
 

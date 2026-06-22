@@ -1,10 +1,41 @@
+use super::Messenger;
 use crate::client::Client;
-use crate::messengers::Messenger;
+use crate::error::{ChatError, Result};
 use crate::models::{Platform, SendMessageRequest, UnifiedMessage};
+
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-const TG_BOT_TOKEN: &str = "5197913983:AAF7vSQpinqjvjQkMYwiG7TiDv_pxk4XjCE";
+/// Креды для ВК
+#[derive(Clone)]
+pub struct TgCredentials {
+    bot_token: String,
+}
+
+impl TgCredentials {
+    /// На базе данных креды содержатся как бинарные данные.
+    /// Тут они переписываются как строка.
+    #[tracing::instrument(skip_all)]
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let bot_token = String::from_utf8(bytes.to_vec()).map_err(|e| e.to_string())?;
+        Ok(Self { bot_token })
+    }
+    fn get_fetch_address(&self, offset: i64) -> String {
+        format!(
+            "https://api.telegram.org/bot{}/getUpdates?offset={}&timeout=25",
+            self.bot_token, offset
+        )
+    }
+    fn get_info_address(&self) -> String {
+        format!(
+            "https://api.telegram.org/bot{}/deleteWebhook?drop_pending_updates=true",
+            self.bot_token
+        )
+    }
+    fn get_send_address(&self) -> String {
+        format!("https://api.telegram.org/bot{}/sendMessage", self.bot_token)
+    }
+}
 
 #[derive(Debug, Deserialize)]
 struct TgUpdatesResponse {
@@ -38,9 +69,13 @@ struct TgMessage {
 }
 
 #[derive(Debug, Deserialize)]
-struct TgUser { id: i64 }
+struct TgUser {
+    id: i64,
+}
 #[derive(Debug, Deserialize)]
-struct TgChat { id: i64 }
+struct TgChat {
+    id: i64,
+}
 
 #[derive(Debug, Serialize)]
 struct TgSendRequest<'a> {
@@ -50,45 +85,57 @@ struct TgSendRequest<'a> {
     reply_to_message_id: Option<i64>,
 }
 
+#[derive(Clone, Debug, Default)]
 pub struct TelegramMessenger {
     client: Client,
 }
 
 impl TelegramMessenger {
     pub fn new() -> Self {
-        Self { client: Client::new() }
+        Self {
+            client: Client::new(),
+        }
     }
 
-    pub async fn ensure_polling_mode(&self) -> Result<(), String> {
-        let url = format!("https://api.telegram.org/bot{}/deleteWebhook?drop_pending_updates=true", TG_BOT_TOKEN);
+    #[tracing::instrument(skip_all)]
+    pub async fn ensure_polling_mode(&self, cred: &TgCredentials) -> Result<()> {
+        let url = cred.get_info_address();
         match self.client.get(&url).await {
-            Ok(_) => { println!("[TG] Вебхук удален, режим Long Polling активирован."); Ok(()) }
-            Err(e) => Err(format!("Не удалось удалить вебхук: {}", e)),
+            Ok(_) => {
+                tracing::info!("[TG] Вебхук удален, режим Long Polling активирован.");
+                Ok(())
+            }
+            Err(e) => Err(ChatError::tg_webhook(e)),
         }
     }
 }
 
 impl Messenger for TelegramMessenger {
-    async fn fetch_messages(&self, offset: i64) -> Result<(Vec<UnifiedMessage>, i64), String> {
-        let url = format!("https://api.telegram.org/bot{}/getUpdates?offset={}&timeout=25", TG_BOT_TOKEN, offset);
-        
+    type Credentials = TgCredentials;
+
+    #[tracing::instrument(skip_all)]
+    async fn fetch_messages(
+        &self,
+        offset: i64,
+        cred: Self::Credentials,
+    ) -> Result<(Vec<UnifiedMessage>, i64)> {
+        let url = cred.get_fetch_address(offset);
+
         let response_text = match self.client.get(&url).await {
             Ok(text) => text,
             Err(e) => {
-                eprintln!("[TG] Сетевая ошибка: {}", e);
+                tracing::error!("[TG] Сетевая ошибка: {}", e);
                 tokio::time::sleep(Duration::from_secs(3)).await;
-                return Ok((Vec::new(), offset)); 
+                return Ok((Vec::new(), offset));
             }
         };
 
-        let tg_response: TgUpdatesResponse = match serde_json::from_str(&response_text) {
-            Ok(parsed) => parsed,
-            Err(e) => return Err(format!("Ошибка парсинга JSON: {}", e)),
-        };
+        let tg_response: TgUpdatesResponse =
+            serde_json::from_str(&response_text).map_err(ChatError::TgResponseParse)?;
 
         if !tg_response.ok {
             if let Some(desc) = tg_response.description {
-                eprintln!("[TG] API Warning: {}", desc);
+                tracing::warn!("[TG] API Warning: {}", desc);
             }
             return Ok((Vec::new(), offset));
         }
@@ -124,10 +171,18 @@ impl Messenger for TelegramMessenger {
         }
     }
 
-    async fn send_message(&self, request: &SendMessageRequest) -> Result<(), String> {
-        let url = format!("https://api.telegram.org/bot{}/sendMessage", TG_BOT_TOKEN);
-        
-        let reply_id = request.reply_to_message_id.as_ref().and_then(|id| id.parse::<i64>().ok());
+    #[tracing::instrument(skip_all)]
+    async fn send_message(
+        &self,
+        request: &SendMessageRequest,
+        cred: Self::Credentials,
+    ) -> Result<()> {
+        let url = cred.get_send_address();
+
+        let reply_id = request
+            .reply_to_message_id
+            .as_ref()
+            .and_then(|id| id.parse::<i64>().ok());
 
         let payload = TgSendRequest {
             chat_id: &request.chat_id,
@@ -135,14 +190,17 @@ impl Messenger for TelegramMessenger {
             reply_to_message_id: reply_id,
         };
 
-        let response_text = self.client.post_json(&url, &payload).await.map_err(|e| e.to_string())?;
-        
-        let tg_response: TgSendResponse = serde_json::from_str(&response_text)
-            .map_err(|e| format!("Ошибка парсинга ответа отправки: {} (Response: {})", e, response_text))?;
+        let response_text = self
+            .client
+            .post_json(&url, &payload)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let tg_response: TgSendResponse =
+            serde_json::from_str(&response_text).map_err(ChatError::TgResponseParse)?;
 
         if !tg_response.ok {
-            let desc = tg_response.description.as_deref().unwrap_or("Неизвестная ошибка");
-            Err(format!("Telegram вернул ошибку: {}", desc))
+            Err(ChatError::tg_response(tg_response.description))
         } else {
             Ok(())
         }

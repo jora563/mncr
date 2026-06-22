@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[repr(u8)]
+#[serde(rename_all(serialize = "lowercase", deserialize = "lowercase"))]
 pub enum Platform {
     Telegram,
     VK,
+    Max,
 }
 
 #[derive(Debug, Serialize, Clone)]

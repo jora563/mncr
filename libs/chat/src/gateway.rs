@@ -1,10 +1,12 @@
-use crate::messengers::telegram::TelegramMessenger;
-use crate::messengers::vk::VkMessenger;
+use crate::error::{ChatError, Result};
 use crate::messengers::Messenger;
+use crate::messengers::telegram::{TelegramMessenger, TgCredentials};
+use crate::messengers::vk::{VkCredentials, VkMessenger};
 use crate::models::{Platform, SendMessageRequest, UnifiedMessage};
+
 use std::sync::Arc;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct MessengerGateway {
     tg: Arc<TelegramMessenger>,
     vk: Arc<VkMessenger>,
@@ -18,30 +20,50 @@ impl MessengerGateway {
         }
     }
 
-    pub async fn send(&self, platform: Platform, request: SendMessageRequest) -> Result<(), String> {
+    #[tracing::instrument(skip_all)]
+    pub async fn send(
+        &self,
+        platform: Platform,
+        request: SendMessageRequest,
+        credentials: &[u8],
+    ) -> Result<()> {
         match platform {
-            Platform::Telegram => self.tg.send_message(&request).await,
-            Platform::VK => self.vk.send_message(&request).await,
+            Platform::Telegram => {
+                let cred = TgCredentials::from_bytes(credentials)?;
+                self.tg.send_message(&request, cred).await
+            }
+            Platform::VK => {
+                let cred = VkCredentials::from_bytes(credentials)?;
+                self.vk.send_message(&request, cred).await
+            }
+            platform => Err(ChatError::Platform(platform)),
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn send_text(
         &self,
         platform: Platform,
         chat_id: impl Into<String>,
         text: impl Into<String>,
         reply_to_message_id: Option<String>,
-    ) -> Result<(), String> {
+        credentials: &[u8],
+    ) -> Result<()> {
         let request = SendMessageRequest {
             chat_id: chat_id.into(),
             text: text.into(),
             reply_to_message_id,
         };
-        self.send(platform, request).await
+        self.send(platform, request, credentials).await
     }
 
-    pub async fn start_inbound_polling<H>(&self, handler: H)
-    where
+    #[tracing::instrument(skip_all)]
+    pub async fn start_inbound_polling<H>(
+        &self,
+        handler: H,
+        tg_credentials: TgCredentials,
+        vk_credentials: VkCredentials,
+    ) where
         H: InboundHandler + Send + Sync + 'static,
     {
         let handler = Arc::new(handler);
@@ -50,10 +72,11 @@ impl MessengerGateway {
         let tg = self.tg.clone();
         let h_tg = handler.clone();
         tokio::spawn(async move {
-            let _ = tg.ensure_polling_mode().await;
+            // TODO: Think of a better way.
+            let _ = tg.ensure_polling_mode(&tg_credentials).await;
             let mut offset: i64 = 0;
             loop {
-                match tg.fetch_messages(offset).await {
+                match tg.fetch_messages(offset, tg_credentials.clone()).await {
                     Ok((messages, new_offset)) => {
                         for msg in messages {
                             h_tg.handle_inbound_message(msg).await;
@@ -63,7 +86,7 @@ impl MessengerGateway {
                         }
                     }
                     Err(e) => {
-                        eprintln!("[TG Gateway Error] {}", e);
+                        tracing::error!("[TG Gateway Error] {}", e);
                         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                     }
                 }
@@ -76,7 +99,7 @@ impl MessengerGateway {
         tokio::spawn(async move {
             let mut offset: i64 = 0;
             loop {
-                match vk.fetch_messages(offset).await {
+                match vk.fetch_messages(offset, vk_credentials.clone()).await {
                     Ok((messages, new_offset)) => {
                         for msg in messages {
                             h_vk.handle_inbound_message(msg).await;
@@ -86,7 +109,7 @@ impl MessengerGateway {
                         }
                     }
                     Err(e) => {
-                        eprintln!("[VK Gateway Error] {}", e);
+                        tracing::error!("[VK Gateway Error] {}", e);
                         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                     }
                 }

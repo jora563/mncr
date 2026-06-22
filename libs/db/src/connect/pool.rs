@@ -60,7 +60,7 @@ impl CoreDbPool {
 
     /// Создать из настроек
     #[tracing::instrument]
-    pub async fn new(settings: CoreDbSettings) -> Result<Self> {
+    pub async fn new(settings: &CoreDbSettings) -> Result<Self> {
         let main_options = settings.get_main_options()?;
         let no_log_options = settings.get_no_log_options();
 
@@ -79,7 +79,7 @@ impl CoreDbPool {
         Ok(Self {
             main_pool,
             no_log_pool,
-            settings,
+            settings: settings.clone(),
         })
     }
 
@@ -87,7 +87,7 @@ impl CoreDbPool {
     #[tracing::instrument]
     pub async fn load<T: AsRef<Path> + std::fmt::Debug>(cfg_path: T) -> Result<Self> {
         let settings = CoreDbSettings::from_file(cfg_path)?;
-        Self::new(settings).await
+        Self::new(&settings).await
     }
 
     /// Провести миграций вверх.
@@ -98,7 +98,7 @@ impl CoreDbPool {
         Ok(())
     }
 
-    /// Провести миграций ввниз.
+    /// Откатить миграций.
     #[tracing::instrument]
     pub async fn run_down_migrations(&self) -> Result<()> {
         let path = PathBuf::from(self.settings.migrations_home()).join("down");
@@ -137,6 +137,8 @@ mod test {
             .join("core_db_settings.toml")
     }
 
+    // НД: Если не работает, проверьте что пользователь и БД из
+    // `db/tests/core_db_settings.toml` существуют.
     #[tokio::test]
     async fn test_load() {
         // Используем тестфрэйм чтобы гарантировать существование БД.

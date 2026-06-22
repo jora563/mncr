@@ -37,13 +37,29 @@ pub struct DbMessage {
     pub created_on: PrimitiveDateTime,
 }
 
-#[derive(Clone, Debug)]
+impl DbMessage {
+    /// Достать доп файлы для сообщения
+    pub async fn get_files(self, ex: &PgPool) -> Result<DbFullMessage> {
+        let files = sqlx::query_as::<_, DbAttachment>(
+            "SELECT * FROM \"attachment\" WHERE message_id = $1 ORDER BY id ASC",
+        )
+        .bind(self.id)
+        .fetch_all(ex)
+        .await?;
+        Ok(DbFullMessage {
+            message: self,
+            files,
+        })
+    }
+}
+
+#[derive(Debug)]
 pub struct DbNewMessage<'a> {
     msg: DbMessage,
     user: Option<&'a DbUserAccount>,
     bot: Option<&'a DbBotAccount>,
-    chat: &'a DbChat,
-    ticket: &'a DbTicket,
+    chat: &'a mut DbChat,
+    ticket: &'a mut DbTicket,
 }
 
 impl<'a> DbNewMessage<'a> {
@@ -52,8 +68,8 @@ impl<'a> DbNewMessage<'a> {
         bot_acc: Option<&'a DbBotAccount>,
         msg_ty: i16,
         external_id: &str,
-        chat: &'a DbChat,
-        ticket: &'a DbTicket,
+        chat: &'a mut DbChat,
+        ticket: &'a mut DbTicket,
         content: Option<String>,
     ) -> Self {
         Self {
@@ -86,8 +102,8 @@ impl<'a> DbNewMessage<'a> {
         user_acc: &'a DbUserAccount,
         msg_ty: i16,
         external_id: &str,
-        chat: &'a DbChat,
-        ticket: &'a DbTicket,
+        chat: &'a mut DbChat,
+        ticket: &'a mut DbTicket,
     ) -> Result<Self> {
         Self::validate_wo_db(
             user_acc.platform_id,
@@ -116,8 +132,8 @@ impl<'a> DbNewMessage<'a> {
         user_acc: &'a DbUserAccount,
         msg_ty: i16,
         external_id: &str,
-        chat: &'a DbChat,
-        ticket: &'a DbTicket,
+        chat: &'a mut DbChat,
+        ticket: &'a mut DbTicket,
         c: &str,
     ) -> Result<Self> {
         Self::validate_wo_db(
@@ -147,8 +163,8 @@ impl<'a> DbNewMessage<'a> {
         bot_acc: &'a DbBotAccount,
         msg_ty: i16,
         external_id: &str,
-        chat: &'a DbChat,
-        ticket: &'a DbTicket,
+        chat: &'a mut DbChat,
+        ticket: &'a mut DbTicket,
         c: &str,
     ) -> Result<Self> {
         Self::validate_wo_db(
@@ -176,20 +192,20 @@ impl<'a> DbNewMessage<'a> {
         chat: &DbChat,
     ) -> Result<()> {
         if user_platform_id != chat.platform_id && user_is_bot {
-            Err(DbError::IncompatibleUserChatPlatforms(
-                user_designation.to_string(),
-                user_platform_id,
-                chat.platform_id,
-            ))
-        } else if user_platform_id != chat.platform_id {
             Err(DbError::IncompatibleBotChatPlatforms(
                 user_designation.to_string(),
                 user_platform_id,
                 chat.platform_id,
             ))
-        } else if user_id != chat.user_account_id && user_is_bot {
+        } else if user_platform_id != chat.platform_id {
+            Err(DbError::IncompatibleUserChatPlatforms(
+                user_designation.to_string(),
+                user_platform_id,
+                chat.platform_id,
+            ))
+        } else if user_id != chat.bot_account_id && user_is_bot {
             Err(DbError::AlienBot(user_designation.to_string(), chat.pkey()))
-        } else if user_id != chat.bot_account_id {
+        } else if user_id != chat.user_account_id && !user_is_bot {
             Err(DbError::AlienUser(
                 user_designation.to_string(),
                 chat.pkey(),
@@ -207,11 +223,13 @@ impl<'a> DbNewMessage<'a> {
     /// 1. Учётная запись бота доступна проектной группе тикета/темы.
     /// 2. Учётная запись пользователя доступна проектной группе тикета/темы.
     /// 3. Чат относится к тем которые включены в тикет.
-    async fn validate(self, ex: &mut PgTransaction<'a>) -> Result<DbMessage> {
+    async fn validate(
+        self,
+        ex: &mut PgTransaction<'a>,
+    ) -> Result<(DbMessage, &'a mut DbChat, &'a mut DbTicket)> {
         let project = DbProject::get_by_id(self.ticket.project_id, &mut **ex)
             .await
             .unwrap();
-
         if let Some(user) = self.user
             && !moma::DbUserAccountProject::exists(user, &project, &mut **ex).await?
         {
@@ -238,7 +256,7 @@ impl<'a> DbNewMessage<'a> {
             );
             return Err(DbError::validation_fail("Chat Message", &msg));
         }
-        Ok(self.msg)
+        Ok((self.msg, self.chat, self.ticket))
     }
 
     /// Insert the new ticket.
@@ -248,8 +266,14 @@ impl<'a> DbNewMessage<'a> {
     {
         let mut tr = ex.begin().await?;
 
-        let mut msg = self.validate(&mut tr).await?;
+        let (mut msg, chat, ticket) = self.validate(&mut tr).await?;
         msg.insert(&mut *tr).await?;
+
+        chat.latest_post_on = Some(msg.created_on);
+        ticket.latest_post_on = Some(msg.created_on);
+
+        chat.update(&mut *tr).await?;
+        ticket.update(&mut *tr).await?;
 
         tr.commit().await?;
         Ok(msg)
@@ -310,7 +334,7 @@ impl DbNewAttachment {
 }
 
 /// Чат и его сообщения
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct DbFullMessage {
     /// Платформа
     pub message: DbMessage,

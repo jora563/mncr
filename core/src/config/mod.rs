@@ -1,0 +1,149 @@
+//! Модуль конфигурации сервиса.
+//! Интегрируем конфигурации остальных библиотек с доп. настройками самого сервиса (их пока нет).
+use crate::error::Result;
+
+use chat::models::Platform;
+use db::connect::CoreDbSettings;
+use db::core_schema::ApiId;
+use llm_client::config::{LlmClientCfg, LlmRequestCfg};
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+
+/// Уровень логгирования
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum TracingLevel {
+    #[default]
+    Off,
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl std::fmt::Display for TracingLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let output = match self {
+            Self::Off => "off",
+            Self::Error => "error",
+            Self::Warn => "warn",
+            Self::Info => "info",
+            Self::Debug => "debug",
+            Self::Trace => "trace",
+        };
+        write!(f, "{output}")
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) trait IntoChatApi {
+    fn into_chat_api(self) -> Platform;
+    fn from_chat_api(a: Platform) -> Self;
+}
+
+impl IntoChatApi for ApiId {
+    fn into_chat_api(self) -> Platform {
+        match self {
+            Self::Vk => Platform::VK,
+            Self::Telegram => Platform::Telegram,
+            Self::Max => Platform::Max,
+        }
+    }
+    fn from_chat_api(a: Platform) -> Self {
+        match a {
+            Platform::VK => Self::Vk,
+            Platform::Telegram => Self::Telegram,
+            Platform::Max => Self::Max,
+        }
+    }
+}
+
+impl IntoChatApi for Platform {
+    fn into_chat_api(self) -> Platform {
+        self
+    }
+    fn from_chat_api(a: Platform) -> Self {
+        a
+    }
+}
+
+// Настройки чат адаптера
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct ChatConfig {
+    apis: Vec<Platform>,
+}
+
+impl ChatConfig {
+    #[allow(dead_code)]
+    pub(super) fn contains<I: IntoChatApi>(&self, api: I) -> bool {
+        self.apis.contains(&api.into_chat_api())
+    }
+}
+
+/// Структура конфигурации ЛЛМ.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct LlmConfig {
+    request: LlmRequestCfg,
+    client: LlmClientCfg,
+}
+
+/// Общая сущность настроек.
+/// ТОДО: Настройки модулей будут подключатся по ходу их исполнения.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Config {
+    chat: ChatConfig,
+    core: CoreSettings,
+    db: CoreDbSettings,
+    llm: LlmConfig,
+}
+
+/// Настройки центрального приложения.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CoreSettings {
+    pub(crate) threads: u16,
+    pub(crate) blocking_threads: u16,
+    /// Максимальный уровень логов.
+    pub(crate) log_level: TracingLevel,
+    /// Записывать ли логи?
+    pub(crate) record_logs: bool,
+    /// Папка куда складываются логи, если мы их записываем
+    /// Если не указана, то логи не записываются.
+    pub(crate) log_dir: Option<String>,
+}
+
+impl Default for CoreSettings {
+    fn default() -> Self {
+        Self {
+            threads: 6,
+            blocking_threads: 2,
+            log_level: TracingLevel::Info,
+            record_logs: false,
+            log_dir: None,
+        }
+    }
+}
+
+impl Config {
+    pub(super) fn from_file<T: AsRef<Path>>(path: T) -> Result<Self> {
+        let file = std::fs::read_to_string(path)?;
+        toml::from_str(&file).map_err(Into::into)
+    }
+
+    pub(super) fn db(&self) -> &CoreDbSettings {
+        &self.db
+    }
+    pub(super) fn core(&self) -> &CoreSettings {
+        &self.core
+    }
+    pub(super) fn llm_req(&self) -> &LlmRequestCfg {
+        &self.llm.request
+    }
+    pub(super) fn llm_client(&self) -> &LlmClientCfg {
+        &self.llm.client
+    }
+    #[allow(dead_code)]
+    pub(super) fn chat(&self) -> &ChatConfig {
+        &self.chat
+    }
+}

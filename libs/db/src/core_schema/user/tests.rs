@@ -23,6 +23,16 @@ async fn test_user_crud() {
             let u2 = DbUser::get_by_id(user.id, &pool).await.unwrap();
             assert_eq!(u2, user);
 
+            let u2 = DbUser::try_get_by_phone("+7-945-11-22-346", &pool)
+                .await
+                .unwrap();
+            assert!(u2.is_none());
+
+            let u2 = DbUser::try_get_by_phone("+7-945-11-22-345", &pool)
+                .await
+                .unwrap();
+            assert_eq!(u2.unwrap(), user);
+
             user.delete(&pool).await.unwrap();
             let err = DbUser::get_by_id(user.id, &pool).await.unwrap_err();
 
@@ -62,6 +72,11 @@ async fn test_user_account_crud() {
 
             account.update(&pool).await.unwrap();
             let ua2 = DbUserAccount::get_by_id(account.id, &pool).await.unwrap();
+            assert_eq!(ua2, account);
+
+            let ua2 = DbUserAccount::get_by_external_id("RPR-001", &pool)
+                .await
+                .unwrap();
             assert_eq!(ua2, account);
 
             account.delete(&pool).await.unwrap();

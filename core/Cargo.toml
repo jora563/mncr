@@ -1,19 +1,28 @@
 [package]
 name = "ai-omni-core"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 chat = { path = "../libs/chat" }
 db = { path = "../libs/db" }
 llm = { path = "../libs/llm" }
+llm-client = { path = "../libs/llm_client" }
 queue = { path = "../libs/queue" }
 
+ahash.workspace = true
+serde.workspace = true
 sqlx.workspace = true
+thiserror.workspace = true
+time.workspace = true
+toml.workspace = true
 tokio = { workspace = true, features = [
     "macros",
     "rt",
     "rt-multi-thread",
     "sync",
 ] }
-serde_json = { workspace = true }
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true

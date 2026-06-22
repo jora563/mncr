@@ -16,6 +16,13 @@ pub enum ApiId {
     // TODO: Для начала хватит.
 }
 
+impl std::fmt::Display for ApiId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        // We simply use the debug implementation for displaying accounts for now.
+        write!(f, "{self:?}")
+    }
+}
+
 /// Платформа, или её инстанция.
 #[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq)]
 #[core_db_table = "platform"]
@@ -54,11 +61,40 @@ impl DbNewPlatform {
 }
 
 impl DbPlatform {
+    pub(super) fn from_tuple(
+        row: (
+            i64,
+            ApiId,
+            String,
+            PrimitiveDateTime,
+            Option<PrimitiveDateTime>,
+        ),
+    ) -> Self {
+        Self {
+            id: row.0,
+            api_id: row.1,
+            name: row.2,
+            created_on: row.3,
+            altered_on: row.4,
+        }
+    }
+
     pub async fn get_mirrors(self, ex: &PgPool) -> Result<DbFullPlatform> {
         Ok(DbFullPlatform {
             mirrors: DbPlatformMirror::get_by_platform_id(self.id, ex).await?,
             platform: self,
         })
+    }
+
+    /// Get all platforms in the database.
+    pub async fn get_all<E>(ex: E) -> Result<Vec<Self>>
+    where
+        E: for<'a> sqlx::PgExecutor<'a>,
+    {
+        sqlx::query_as::<_, Self>("SELECT * FROM platform ORDER By api_id ASC")
+            .fetch_all(ex)
+            .await
+            .map_err(Into::into)
     }
 }
 
@@ -106,6 +142,20 @@ impl DbPlatformMirror {
         .await
         .map_err(Into::into)
     }
+
+    pub async fn get_for_platforms<E>(platforms: &[DbPlatform], ex: E) -> Result<Vec<Self>>
+    where
+        E: for<'a> sqlx::PgExecutor<'a>,
+    {
+        let ids = platforms.iter().map(|p| p.id).collect::<Vec<_>>();
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM platform_mirror WHERE platform_id = ANY($1) ORDER BY platform_id ASC",
+        )
+        .bind(ids)
+        .fetch_all(ex)
+        .await
+        .map_err(Into::into)
+    }
 }
 
 /// Платформа с адресами
@@ -123,6 +173,27 @@ impl DbFullPlatform {
             platform: DbPlatform::get_by_id(id, ex).await?,
             mirrors: DbPlatformMirror::get_by_platform_id(id, ex).await?,
         })
+    }
+
+    /// Достать все платформы в базе данных.
+    pub async fn get_all(ex: &PgPool) -> Result<Vec<Self>> {
+        let platforms = DbPlatform::get_all(ex).await?;
+        let mut mirrors = DbPlatformMirror::get_for_platforms(&platforms, ex).await?;
+
+        let ret = platforms
+            .into_iter()
+            .map(|p| {
+                let mirrors = mirrors
+                    .extract_if(std::ops::RangeFull, |b| b.platform_id == p.id)
+                    .collect::<Vec<DbPlatformMirror>>();
+                Self {
+                    platform: p,
+                    mirrors,
+                }
+            })
+            .collect::<Vec<DbFullPlatform>>();
+
+        Ok(ret)
     }
 }
 

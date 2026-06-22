@@ -4,7 +4,7 @@ use sqlx::types::time::PrimitiveDateTime;
 use sqlx::{FromRow, PgExecutor, PgPool};
 
 use crate::core_schema::CoreDbCrud;
-use crate::error::Result;
+use crate::error::{DbError, Result};
 
 /// Сущность проекта
 #[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq)]
@@ -47,6 +47,26 @@ impl DbNewProject {
 }
 
 impl DbProject {
+    pub(super) fn from_tuple(
+        row: (
+            i64,
+            i64,
+            String,
+            String,
+            PrimitiveDateTime,
+            Option<PrimitiveDateTime>,
+        ),
+    ) -> Self {
+        Self {
+            id: row.0,
+            project_group_id: row.1,
+            external_id: row.2,
+            project_name: row.3,
+            created_on: row.4,
+            altered_on: row.5,
+        }
+    }
+
     pub async fn get_by_group_id<E>(id: i64, ex: E) -> Result<Vec<Self>>
     where
         E: for<'a> sqlx::PgExecutor<'a>,
@@ -58,6 +78,18 @@ impl DbProject {
         .fetch_all(ex)
         .await
         .map_err(Into::into)
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn get_by_external_id<'a, T: sqlx::PgExecutor<'a>>(
+        ext_id: &str,
+        ex: T,
+    ) -> Result<Self> {
+        let res = Self::get_by_field("external_id", ext_id, ex)
+            .await?
+            .pop()
+            .ok_or_else(|| DbError::not_found("DbProject", "external_id", ext_id))?;
+        Ok(res)
     }
 }
 

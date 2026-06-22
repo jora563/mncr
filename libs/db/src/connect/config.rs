@@ -10,7 +10,7 @@ use crate::error::{DbError, Result};
 
 /// Настройки БД, которые хранятся в ТОМЛ файле, и используются
 /// для создания соединения с БД.
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub struct CoreDbSettings {
     max_connections: u32,
@@ -24,6 +24,24 @@ pub struct CoreDbSettings {
     migrations_home: String,
     user: String,
     pw: String,
+}
+
+impl std::fmt::Debug for CoreDbSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("CoreDbSettings")
+            .field("max_connections", &self.max_connections)
+            .field("min_connections", &self.min_connections)
+            .field("max_no_log_connections", &self.max_no_log_connections)
+            .field("acquire_timeout_s", &self.acquire_timeout_s)
+            .field("max_lifetime_s", &self.max_lifetime_s)
+            .field("idle_timeout_s", &self.idle_timeout_s)
+            .field("db_host_url", &self.db_host_url)
+            .field("db_name", &self.db_name)
+            .field("migrations_home", &self.migrations_home)
+            .field("user", &self.user)
+            .field("pw", &"[hidden]")
+            .finish()
+    }
 }
 
 /// Дефаулт в ручную чтобы неуказанные значение в конфиге имели какой-то смысл.

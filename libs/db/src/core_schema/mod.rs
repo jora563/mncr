@@ -12,7 +12,9 @@ pub mod project;
 pub mod ticket;
 pub mod user;
 
-pub use bot::{DbBot, DbBotAccount, DbFullBotAccount, DbNewBot, DbNewBotAccount};
+pub use bot::{
+    DbBot, DbBotAccount, DbBotAccountWithMeta, DbFullBotAccount, DbNewBot, DbNewBotAccount,
+};
 pub use chat::{
     DbAttachment, DbChat, DbFullChat, DbFullMessage, DbMessage, DbNewAttachment, DbNewChat,
     DbNewMessage,
