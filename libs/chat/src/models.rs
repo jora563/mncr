@@ -9,7 +9,6 @@ pub enum Platform {
     Max,
 }
 
-/// Вложение к сообщению. Поддерживаются только три типа: контакт, фото, документ.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Attachment {
@@ -20,13 +19,18 @@ pub enum Attachment {
     },
     Photo {
         file_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
         file_url: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         file_size: Option<i64>,
     },
     Document {
         file_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
         file_url: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         file_size: Option<i64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         file_name: Option<String>,
     },
 }
@@ -51,27 +55,27 @@ impl UnifiedMessage {
     }
 }
 
-/// Разметка ответа (клавиатура) для мессенджеров.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ReplyMarkup {
     Telegram(TelegramKeyboard),
 }
 
-/// Клавиатура Telegram.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TelegramKeyboard {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub keyboard: Option<Vec<Vec<TelegramKeyboardButton>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub resize_keyboard: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub one_time_keyboard: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub remove_keyboard: Option<bool>,
+#[serde(untagged)]
+pub enum TelegramKeyboard {
+    Show {
+        keyboard: Vec<Vec<TelegramKeyboardButton>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        resize_keyboard: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        one_time_keyboard: Option<bool>,
+    },
+    Remove {
+        remove_keyboard: bool,
+    },
 }
 
-/// Кнопка клавиатуры Telegram.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TelegramKeyboardButton {
     pub text: String,
@@ -80,26 +84,20 @@ pub struct TelegramKeyboardButton {
 }
 
 impl TelegramKeyboard {
-    /// Создать клавиатуру с кнопкой "Поделиться контактом".
     pub fn request_contact() -> Self {
-        Self {
-            keyboard: Some(vec![vec![TelegramKeyboardButton {
+        Self::Show {
+            keyboard: vec![vec![TelegramKeyboardButton {
                 text: "📱 Поделиться номером телефона".to_string(),
                 request_contact: Some(true),
-            }]]),
+            }]],
             resize_keyboard: Some(true),
             one_time_keyboard: Some(true),
-            remove_keyboard: None,
         }
     }
 
-    /// Убрать клавиатуру.
     pub fn remove() -> Self {
-        Self {
-            keyboard: None,
-            resize_keyboard: None,
-            one_time_keyboard: None,
-            remove_keyboard: Some(true),
+        Self::Remove {
+            remove_keyboard: true,
         }
     }
 }

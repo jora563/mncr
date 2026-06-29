@@ -6,32 +6,32 @@ use crate::models::{Attachment, Platform, ReplyMarkup, SendMessageRequest, Unifi
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-/// Креды для Telegram
 #[derive(Clone)]
 pub struct TgCredentials {
     bot_token: String,
 }
 
 impl TgCredentials {
-    /// На базе данных креды содержатся как бинарные данные.
-    /// Тут они переписываются как строка.
     #[tracing::instrument(skip_all)]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let bot_token = String::from_utf8(bytes.to_vec()).map_err(|e| e.to_string())?;
         Ok(Self { bot_token })
     }
+
     fn get_fetch_address(&self, offset: i64) -> String {
         format!(
             "https://api.telegram.org/bot{}/getUpdates?offset={}&timeout=25",
             self.bot_token, offset
         )
     }
+
     fn get_info_address(&self) -> String {
         format!(
             "https://api.telegram.org/bot{}/deleteWebhook?drop_pending_updates=true",
             self.bot_token
         )
     }
+
     fn get_send_address(&self) -> String {
         format!("https://api.telegram.org/bot{}/sendMessage", self.bot_token)
     }
@@ -126,13 +126,13 @@ impl TelegramMessenger {
     #[tracing::instrument(skip_all)]
     pub async fn ensure_polling_mode(&self, cred: &TgCredentials) -> Result<()> {
         let url = cred.get_info_address();
-        match self.client.get(&url).await {
-            Ok(_) => {
+        self.client
+            .get(&url)
+            .await
+            .map(|_| {
                 tracing::info!("[TG] Вебхук удален, режим Long Polling активирован.");
-                Ok(())
-            }
-            Err(e) => Err(ChatError::tg_webhook(e)),
-        }
+            })
+            .map_err(ChatError::tg_webhook)
     }
 }
 
@@ -173,42 +173,10 @@ impl Messenger for TelegramMessenger {
         if let Some(updates) = tg_response.result {
             for update in updates {
                 received_any_update = true;
-                if update.update_id >= max_update_id {
-                    max_update_id = update.update_id;
-                }
+                max_update_id = max_update_id.max(update.update_id);
 
                 if let Some(msg) = update.message {
-                    let mut attachments = Vec::new();
-
-                    // Парсим контакт
-                    if let Some(contact) = msg.contact {
-                        attachments.push(Attachment::Contact {
-                            phone: contact.phone_number,
-                            first_name: contact.first_name,
-                            last_name: contact.last_name,
-                        });
-                    }
-
-                    // Парсим фото (берём последний элемент — обычно самое большое разрешение)
-                    if let Some(photos) = msg.photo {
-                        if let Some(largest) = photos.into_iter().last() {
-                            attachments.push(Attachment::Photo {
-                                file_id: largest.file_id,
-                                file_url: None,
-                                file_size: largest.file_size,
-                            });
-                        }
-                    }
-
-                    // Парсим документ
-                    if let Some(doc) = msg.document {
-                        attachments.push(Attachment::Document {
-                            file_id: doc.file_id,
-                            file_url: None,
-                            file_size: doc.file_size,
-                            file_name: doc.file_name,
-                        });
-                    }
+                    let attachments = parse_attachments(&msg);
 
                     unified_messages.push(UnifiedMessage {
                         platform: Platform::Telegram,
@@ -223,11 +191,13 @@ impl Messenger for TelegramMessenger {
             }
         }
 
-        if received_any_update {
-            Ok((unified_messages, max_update_id + 1))
+        let new_offset = if received_any_update {
+            max_update_id + 1
         } else {
-            Ok((unified_messages, offset))
-        }
+            offset
+        };
+
+        Ok((unified_messages, new_offset))
     }
 
     #[tracing::instrument(skip_all)]
@@ -243,11 +213,10 @@ impl Messenger for TelegramMessenger {
             .as_ref()
             .and_then(|id| id.parse::<i64>().ok());
 
-        // Сериализуем reply_markup как JSON-строку (требование Telegram API)
         let reply_markup_str = request
             .reply_markup
             .as_ref()
-            .map(|markup| serde_json::to_string(markup))
+            .map(|m| serde_json::to_string(m))
             .transpose()
             .map_err(|e| ChatError::tg_response(Some(e.to_string())))?;
 
@@ -257,8 +226,6 @@ impl Messenger for TelegramMessenger {
             reply_to_message_id: reply_id,
             reply_markup: reply_markup_str,
         };
-
-        tracing::debug!("[TG] Sending message to {}: {}", request.chat_id, request.text);
 
         let response_text = self
             .client
@@ -275,4 +242,38 @@ impl Messenger for TelegramMessenger {
             Ok(())
         }
     }
+}
+
+/// Парсит вложения из сообщения Telegram
+fn parse_attachments(msg: &TgMessage) -> Vec<Attachment> {
+    let mut attachments = Vec::new();
+
+    if let Some(contact) = &msg.contact {
+        attachments.push(Attachment::Contact {
+            phone: contact.phone_number.clone(),
+            first_name: contact.first_name.clone(),
+            last_name: contact.last_name.clone(),
+        });
+    }
+
+    if let Some(photos) = &msg.photo {
+        if let Some(largest) = photos.last() {
+            attachments.push(Attachment::Photo {
+                file_id: largest.file_id.clone(),
+                file_url: None,
+                file_size: largest.file_size,
+            });
+        }
+    }
+
+    if let Some(doc) = &msg.document {
+        attachments.push(Attachment::Document {
+            file_id: doc.file_id.clone(),
+            file_url: None,
+            file_size: doc.file_size,
+            file_name: doc.file_name.clone(),
+        });
+    }
+
+    attachments
 }

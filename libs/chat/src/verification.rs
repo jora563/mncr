@@ -1,23 +1,41 @@
 //! Модуль верификации пользователя.
-//! Содержит логику проверки номера телефона и извлечения его из вложений.
-//! Вся логика определения телефона из контакта находится здесь (в libs/chat).
+//! Содержит логику извлечения данных из вложений.
 
 use crate::models::{Attachment, UnifiedMessage};
 
-/// Извлечь номер телефона из вложений сообщения (из контакта).
-/// Если в сообщении есть контакт, возвращаем номер телефона из него.
-pub fn extract_phone_from_message(msg: &UnifiedMessage) -> Option<String> {
-    for attachment in &msg.attachments {
-        if let Attachment::Contact { phone, .. } = attachment {
-            return Some(phone.clone());
-        }
-    }
-    None
+/// Извлечь номер телефона из вложения-контакта
+pub fn extract_phone(msg: &UnifiedMessage) -> Option<String> {
+    msg.attachments.iter().find_map(|a| match a {
+        Attachment::Contact { phone, .. } => Some(phone.clone()),
+        _ => None,
+    })
 }
 
-/// Проверить, содержит ли сообщение вложение с контактом.
-pub fn has_contact_attachment(msg: &UnifiedMessage) -> bool {
-    msg.attachments
+/// Извлечь имя пользователя из вложения-контакта
+pub fn extract_name(msg: &UnifiedMessage) -> Option<String> {
+    msg.attachments.iter().find_map(|a| match a {
+        Attachment::Contact {
+            first_name,
+            last_name,
+            ..
+        } => {
+            let mut name = first_name.clone();
+            if let Some(last) = last_name {
+                name.push(' ');
+                name.push_str(last);
+            }
+            Some(name)
+        }
+        _ => None,
+    })
+}
+
+/// Проверить, содержит ли сообщение только контакт (без осмысленного текста)
+pub fn is_contact_only(msg: &UnifiedMessage) -> bool {
+    let has_contact = msg
+        .attachments
         .iter()
-        .any(|a| matches!(a, Attachment::Contact { .. }))
+        .any(|a| matches!(a, Attachment::Contact { .. }));
+    let is_media = msg.text.is_empty() || msg.text == "[Медиа]";
+    has_contact && is_media
 }
