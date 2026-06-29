@@ -6,6 +6,7 @@ use crate::context::CoreCtx;
 use crate::error::Result;
 use crate::messengers::ChatMessages;
 
+use chat::models::{ReplyMarkup, TelegramKeyboard};
 use db::core_schema::DbBotAccountWithMeta;
 use std::sync::Arc;
 use tokio::task as tt;
@@ -94,8 +95,74 @@ async fn process_messages_inner(
     meta: Arc<DbBotAccountWithMeta>,
     chat_msgs: ChatMessages,
 ) -> Result<()> {
+    // Проверяем, содержит ли сообщение только контакт (для верификации)
+    let has_only_contact = chat_msgs.has_only_contact_attachment();
+    
+    tracing::info!(
+        "Processing message from user {}. Has only contact: {}",
+        chat_msgs.get_user_external_id(),
+        has_only_contact
+    );
+
     // Достать разговор из БД, осуществив нужные проверки.
-    let mut data = db_ops::check_validity_get_data(&chat_msgs, &meta, ctx.db()).await?;
+    let outcome = db_ops::check_validity_get_data(&chat_msgs, &meta, ctx.db()).await?;
+
+    // Если нужна верификация по телефону — отправляем запрос и завершаем обработку.
+    let mut data = match outcome {
+        db_ops::ValidationOutcome::Ok(data) => {
+            tracing::info!("Validation successful. User exists or created.");
+            data
+        }
+        db_ops::ValidationOutcome::NeedPhoneVerification { chat_ext_id, .. } => {
+            tracing::info!(
+                "User from chat {} needs phone verification. Requesting contact.",
+                chat_ext_id
+            );
+            
+            // Создаём клавиатуру с кнопкой "Поделиться контактом"
+            let keyboard = TelegramKeyboard::request_contact();
+            let reply_markup = ReplyMarkup::Telegram(keyboard);
+            
+            ctx.chat()
+                .send_text(
+                    &meta,
+                    &chat_ext_id,
+                    "Для продолжения работы, пожалуйста, поделитесь своим номером телефона. \
+                     Нажмите на кнопку ниже, чтобы отправить свой контакт.",
+                    chat_msgs.get_last_msg_external_id(),
+                    Some(reply_markup),
+                )
+                .await?;
+            return Ok(());
+        }
+    };
+
+    // Если сообщение содержит только контакт (верификация), подтверждаем и не отправляем в LLM
+    if has_only_contact {
+        tracing::info!("User verified via contact. Saving to DB and sending confirmation.");
+        
+        // Сохраняем сообщение пользователя в БД (текст будет "[Медиа]")
+        let text = chat_msgs.get_text().last().unwrap_or("[Медиа]");
+        tracing::info!("Inserting user message to DB: {}", text);
+        db_ops::insert_next_user_message(text, &mut data, ctx.db()).await?;
+        tracing::info!("User message inserted successfully");
+        
+        // Убираем клавиатуру
+        let remove_keyboard = TelegramKeyboard::remove();
+        let reply_markup = ReplyMarkup::Telegram(remove_keyboard);
+        
+        ctx.chat()
+            .send_text(
+                &meta,
+                data.chat.external_id.as_str(),
+                "Спасибо! Ваш номер телефона успешно сохранён. Теперь вы можете начать общение.",
+                chat_msgs.get_last_msg_external_id(),
+                Some(reply_markup),
+            )
+            .await?;
+        tracing::info!("Confirmation sent to user");
+        return Ok(());
+    }
 
     // Добавить изначальное сообщение.
     let mut conjoined = String::new();

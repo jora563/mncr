@@ -106,7 +106,7 @@ impl VkMessenger {
 
 #[derive(Debug, Deserialize)]
 struct VkSendResponse {
-    response: Option<i64>,
+    response: Option<u64>,
     error: Option<VkError>,
 }
 
@@ -123,7 +123,7 @@ impl Messenger for VkMessenger {
         struct VkPollResponse {
             #[serde(default)]
             ts: Option<u64>,
-            failed: Option<u8>,
+            failed: Option<i64>,
             #[serde(default)]
             updates: Option<Vec<serde_json::Value>>,
         }
@@ -220,6 +220,7 @@ impl Messenger for VkMessenger {
                             },
                             timestamp,
                             message_id: Some(message_id.to_string()),
+                            attachments: Vec::new(), // VK: вложения пока не парсим
                         });
                     }
                 }

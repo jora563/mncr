@@ -1,7 +1,7 @@
 //! Модуль логики работы с чатами
 use ahash::AHashMap;
 use chat::messengers::{Messenger, TelegramMessenger, TgCredentials, VkCredentials, VkMessenger};
-use chat::models::{SendMessageRequest, UnifiedMessage};
+use chat::models::{ReplyMarkup, SendMessageRequest, TelegramKeyboard, UnifiedMessage};
 use db::core_schema::{ApiId, CoreDbCrud, DbBotAccountWithMeta, DbChat, DbFullMessage};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -12,12 +12,12 @@ use crate::error::{CoreError, Result};
 #[derive(Debug, Default)]
 pub(crate) struct ChatDriver {
     tg: Arc<TelegramMessenger>,
-    /// ИД бота (ключ) против оффсета (значение). Оффсет это измерение которым пользуются
-    ///  многие месенджеры чтобы 'понять' с какого сообщения начинать возврощать сообщения.
+    /// ИД бота (ключ) против оффсета (значение). Оффсет это измерением которым пользуются
+    /// многие месенджеры чтобы 'понять' с какого сообщения начинать возврощать сообщения.
     tg_offsets: Arc<RwLock<AHashMap<i64, i64>>>,
     vk: Arc<VkMessenger>,
-    /// ИД бота (ключ) против оффсета (значение). Оффсет это измерение которым пользуются
-    ///  многие месенджеры чтобы 'понять' с какого сообщения начинать возврощать сообщения.
+    /// ИД бота (ключ) против оффсета (значение). Оффсет это измерением которым пользуются
+    /// многие месенджеры чтобы 'понять' с какого сообщения начинать возврощать сообщения.
     vk_offsets: Arc<RwLock<AHashMap<i64, i64>>>,
 }
 
@@ -32,18 +32,53 @@ impl ChatMessages {
     pub(crate) fn get_last_msg_external_id(&self) -> Option<String> {
         self.0.iter().last().and_then(|v| v.message_id.clone())
     }
-    pub(crate) fn get_user_nick(&self) -> &str {
-        "Unknown"
+    
+    /// Извлекаем имя пользователя из контакта (first_name + last_name).
+    /// Если контакта нет, возвращаем "Unknown".
+    pub(crate) fn get_user_name(&self) -> String {
+        for msg in &self.0 {
+            for attachment in &msg.attachments {
+                if let chat::models::Attachment::Contact { first_name, last_name, .. } = attachment {
+                    let mut name = first_name.clone();
+                    if let Some(last) = last_name {
+                        name.push(' ');
+                        name.push_str(last);
+                    }
+                    return name;
+                }
+            }
+        }
+        "Unknown".to_string()
     }
+    
     pub(crate) fn get_chat_external_id(&self) -> &str {
         self.0.iter().last().map_or("", |v| &v.chat_id)
     }
     pub(crate) fn get_ticket_number(&self) -> Option<i32> {
         None
     }
-    /// Если ничего другого нет, то берёмся за телефон.
+    /// Извлекаем телефон из вложения-контакта через модуль верификации libs/chat.
+    /// Если ни одно сообщение не содержит контакт, возвращаем None.
     pub(crate) fn get_phone(&self) -> Option<String> {
-        Some("+79452200022".to_string())
+        for msg in &self.0 {
+            if let Some(phone) = chat::verification::extract_phone_from_message(msg) {
+                return Some(phone);
+            }
+        }
+        None
+    }
+
+    /// Проверяет, содержит ли сообщение только контакт (без текста или с текстом "[Медиа]").
+    /// Используется для определения сообщений верификации.
+    pub(crate) fn has_only_contact_attachment(&self) -> bool {
+        self.0.iter().all(|msg| {
+            let has_contact = msg
+                .attachments
+                .iter()
+                .any(|a| matches!(a, chat::models::Attachment::Contact { .. }));
+            let is_media_placeholder = msg.text == "[Медиа]";
+            has_contact && (msg.text.is_empty() || is_media_placeholder)
+        })
     }
 
     pub(crate) fn get_text(&self) -> impl Iterator<Item = &str> {
@@ -100,6 +135,46 @@ impl ChatDriver {
             chat_id: chat.external_id.to_owned(),
             text: message.message.content.unwrap_or_default(),
             reply_to_message_id: original.get_last_msg_external_id(),
+            reply_markup: None,
+        };
+        match platform.platform.platform.api_id {
+            ApiId::Telegram => self
+                .tg
+                .send_message(
+                    &request,
+                    TgCredentials::from_bytes(&platform.account.token)?,
+                )
+                .await
+                .map_err(CoreError::ChatLib)?,
+            ApiId::Vk => self
+                .vk
+                .send_message(
+                    &request,
+                    VkCredentials::from_bytes(&platform.account.token)?,
+                )
+                .await
+                .map_err(CoreError::ChatLib)?,
+            ApiId::Max => return Err(CoreError::ChatApiDisconnected(ApiId::Max)),
+        };
+        Ok(())
+    }
+
+    /// Отправить текстовое сообщение в чат напрямую (без привязки к DbChat).
+    /// Используется, например, для запроса верификации по телефону.
+    #[tracing::instrument(skip_all)]
+    pub(crate) async fn send_text(
+        &self,
+        platform: &DbBotAccountWithMeta,
+        chat_id: &str,
+        text: &str,
+        reply_to: Option<String>,
+        reply_markup: Option<ReplyMarkup>,
+    ) -> Result<()> {
+        let request = SendMessageRequest {
+            chat_id: chat_id.to_owned(),
+            text: text.to_owned(),
+            reply_to_message_id: reply_to,
+            reply_markup,
         };
         match platform.platform.platform.api_id {
             ApiId::Telegram => self
@@ -139,7 +214,7 @@ async fn get_telegram(
     let offset = offsets
         .read()
         .await
-        .get(&platform.account.pkey())
+        .get(&bot_acc.pkey())
         .copied()
         .unwrap_or(0);
     let cred = TgCredentials::from_bytes(&bot_acc.token)?;

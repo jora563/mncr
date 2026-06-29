@@ -1,12 +1,12 @@
 use super::Messenger;
 use crate::client::Client;
 use crate::error::{ChatError, Result};
-use crate::models::{Platform, SendMessageRequest, UnifiedMessage};
+use crate::models::{Attachment, Platform, ReplyMarkup, SendMessageRequest, UnifiedMessage};
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-/// Креды для ВК
+/// Креды для Telegram
 #[derive(Clone)]
 pub struct TgCredentials {
     bot_token: String,
@@ -66,15 +66,39 @@ struct TgMessage {
     chat: TgChat,
     date: u64,
     text: Option<String>,
+    contact: Option<TgContact>,
+    photo: Option<Vec<TgPhotoSize>>,
+    document: Option<TgDocument>,
 }
 
 #[derive(Debug, Deserialize)]
 struct TgUser {
     id: i64,
 }
+
 #[derive(Debug, Deserialize)]
 struct TgChat {
     id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct TgContact {
+    phone_number: String,
+    first_name: String,
+    last_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TgPhotoSize {
+    file_id: String,
+    file_size: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TgDocument {
+    file_id: String,
+    file_size: Option<i64>,
+    file_name: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -83,6 +107,8 @@ struct TgSendRequest<'a> {
     text: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     reply_to_message_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reply_markup: Option<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -152,6 +178,38 @@ impl Messenger for TelegramMessenger {
                 }
 
                 if let Some(msg) = update.message {
+                    let mut attachments = Vec::new();
+
+                    // Парсим контакт
+                    if let Some(contact) = msg.contact {
+                        attachments.push(Attachment::Contact {
+                            phone: contact.phone_number,
+                            first_name: contact.first_name,
+                            last_name: contact.last_name,
+                        });
+                    }
+
+                    // Парсим фото (берём последний элемент — обычно самое большое разрешение)
+                    if let Some(photos) = msg.photo {
+                        if let Some(largest) = photos.into_iter().last() {
+                            attachments.push(Attachment::Photo {
+                                file_id: largest.file_id,
+                                file_url: None,
+                                file_size: largest.file_size,
+                            });
+                        }
+                    }
+
+                    // Парсим документ
+                    if let Some(doc) = msg.document {
+                        attachments.push(Attachment::Document {
+                            file_id: doc.file_id,
+                            file_url: None,
+                            file_size: doc.file_size,
+                            file_name: doc.file_name,
+                        });
+                    }
+
                     unified_messages.push(UnifiedMessage {
                         platform: Platform::Telegram,
                         user_id: msg.from.id.to_string(),
@@ -159,6 +217,7 @@ impl Messenger for TelegramMessenger {
                         text: msg.text.unwrap_or_else(|| "[Медиа]".to_string()),
                         timestamp: msg.date,
                         message_id: Some(msg.message_id.to_string()),
+                        attachments,
                     });
                 }
             }
@@ -184,11 +243,22 @@ impl Messenger for TelegramMessenger {
             .as_ref()
             .and_then(|id| id.parse::<i64>().ok());
 
+        // Сериализуем reply_markup как JSON-строку (требование Telegram API)
+        let reply_markup_str = request
+            .reply_markup
+            .as_ref()
+            .map(|markup| serde_json::to_string(markup))
+            .transpose()
+            .map_err(|e| ChatError::tg_response(Some(e.to_string())))?;
+
         let payload = TgSendRequest {
             chat_id: &request.chat_id,
             text: &request.text,
             reply_to_message_id: reply_id,
+            reply_markup: reply_markup_str,
         };
+
+        tracing::debug!("[TG] Sending message to {}: {}", request.chat_id, request.text);
 
         let response_text = self
             .client

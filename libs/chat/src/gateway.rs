@@ -53,6 +53,7 @@ impl MessengerGateway {
             chat_id: chat_id.into(),
             text: text.into(),
             reply_to_message_id,
+            reply_markup: None
         };
         self.send(platform, request, credentials).await
     }

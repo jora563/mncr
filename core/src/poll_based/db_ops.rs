@@ -11,10 +11,10 @@ use crate::messengers::ChatMessages;
 /// 1. Прошли, пользователь новый; его надо внести в реестр и создать чат, и тему.
 /// 2. Прошли, пользователь есть, чат новый; надо создать чат и тему.
 /// 3. Прошли, пользователь и чат есть - возможно надо создать тему.
-/// 4. Не прошли
+/// 4. Не прошли — нужна верификация по телефону.
 ///
 /// Данные валидации, которыми мы можем в последствии воспользоваться
-///  в дальнейших операциях с этим чатом.
+/// в дальнейших операциях с этим чатом.
 #[derive(Debug)]
 pub(super) struct StandardData {
     pub(super) user_account: DbUserAccount,
@@ -25,6 +25,17 @@ pub(super) struct StandardData {
     pub(super) chat: DbChat,
 }
 
+/// Исход валидации: либо успех с данными, либо запрос на верификацию телефона.
+#[derive(Debug)]
+pub(super) enum ValidationOutcome {
+    Ok(StandardData),
+    /// Пользователь не найден, и в сообщении нет контакта. Нужно попросить отправить контакт.
+    NeedPhoneVerification {
+        chat_ext_id: String,
+        user_ext_id: String,
+    },
+}
+
 /// Проверить валидность сообщений которые приходят (мы не доверяем пользователю АПИ, и
 /// поэтому проверяем всё.)
 #[tracing::instrument(skip_all)]
@@ -32,11 +43,12 @@ pub(super) async fn check_validity_get_data(
     messages: &ChatMessages,
     meta: &DbBotAccountWithMeta,
     db: &CoreDbPool,
-) -> Result<StandardData> {
+) -> Result<ValidationOutcome> {
     let pool = db.get();
     let user_acc_external_id = messages.get_user_external_id();
     let chat_ext_id = messages.get_chat_external_id();
     let maybe_user_phone = messages.get_phone();
+    let user_name = messages.get_user_name();
 
     // Мы берем бота и проект из метаданных которые нам и так доступны.
     let ba = &meta.account;
@@ -55,15 +67,21 @@ pub(super) async fn check_validity_get_data(
     } else if let Some(ref num) = maybe_user_phone {
         DbUser::try_get_by_phone(num, pool).await?
     } else {
-        let msg = format!("Cannot identify user {chat_ext_id} from {}", platform.name);
-        return Err(CoreError::Other(msg)); // TODO: Just what kind of error do we want?
+        // Пользователя нет в БД, и мы не знаем его телефон (нет контакта в сообщении).
+        // Возвращаем исход "нужна верификация".
+        return Ok(ValidationOutcome::NeedPhoneVerification {
+            chat_ext_id: chat_ext_id.to_string(),
+            user_ext_id: user_acc_external_id.to_string(),
+        });
     };
+
     // Если нет пользователя, создаём запись.
     let user = if let Some(user) = user {
         user
     } else {
         let user_phone = maybe_user_phone.as_ref().expect("Exists");
-        let designation = messages.get_user_nick();
+        let designation = &user_name;
+        tracing::info!("Creating new user with phone: {}, name: {}", user_phone, designation);
         DbNewUser::new(user_phone, designation).insert(pool).await?
     };
     if !DbProjectUser::exists(proj, &user, pool).await? {
@@ -74,11 +92,12 @@ pub(super) async fn check_validity_get_data(
     let user_account = if let Some(ua) = ua {
         ua
     } else {
+        tracing::info!("Creating new user account for user_id: {}", user.pkey());
         DbNewUserAccount::new(
             &user,
             platform,
             user_acc_external_id,
-            messages.get_user_nick(),
+            &user_name,
         )
         .insert(pool)
         .await?
@@ -107,7 +126,7 @@ pub(super) async fn check_validity_get_data(
             user_account.pkey(),
             chat.user_account_id
         );
-        return Err(CoreError::ChatValidation(msg)); // TODO: Just what kind of error do we want?
+        return Err(CoreError::ChatValidation(msg));
     } else if ba.pkey() != chat.bot_account_id {
         let msg = format!(
             "Bot account {} does not match chat {}",
@@ -142,14 +161,14 @@ pub(super) async fn check_validity_get_data(
         DbTicketChat::link(&ticket, &chat, pool).await?;
     }
 
-    Ok(StandardData {
+    Ok(ValidationOutcome::Ok(StandardData {
         user_account,
         user,
         bot_account: ba.to_owned(),
         project: proj.to_owned(),
         ticket,
         chat,
-    })
+    }))
 }
 
 #[tracing::instrument(skip_all)]
@@ -194,7 +213,7 @@ pub(super) async fn insert_next_user_message(
     message.get_files(db.get()).await.map_err(Into::into)
 }
 
-/// ТODO: Decide whether the ticket number is created locally or remotely. Probably locally.
+/// TODO: Decide whether the ticket number is created locally or remotely. Probably locally.
 /// For now we use a mock.
 /// TODO2: Decide how to determine the topic of a project.
 #[tracing::instrument(skip_all)]
