@@ -26,14 +26,15 @@ impl MessengerGateway {
         platform: Platform,
         request: SendMessageRequest,
         credentials: &[u8],
+        mirrors: Vec<String>,
     ) -> Result<()> {
         match platform {
             Platform::Telegram => {
-                let cred = TgCredentials::from_bytes(credentials)?;
+                let cred = TgCredentials::from_bytes(credentials, mirrors)?;
                 self.tg.send_message(&request, cred).await
             }
             Platform::VK => {
-                let cred = VkCredentials::from_bytes(credentials)?;
+                let cred = VkCredentials::from_bytes(credentials, mirrors)?;
                 self.vk.send_message(&request, cred).await
             }
             platform => Err(ChatError::Platform(platform)),
@@ -48,6 +49,7 @@ impl MessengerGateway {
         text: impl Into<String>,
         reply_to_message_id: Option<String>,
         credentials: &[u8],
+        mirrors: Vec<String>,
     ) -> Result<()> {
         let request = SendMessageRequest {
             chat_id: chat_id.into(),
@@ -55,7 +57,7 @@ impl MessengerGateway {
             reply_to_message_id,
             reply_markup: None
         };
-        self.send(platform, request, credentials).await
+        self.send(platform, request, credentials, mirrors).await
     }
 
     #[tracing::instrument(skip_all)]

@@ -12,9 +12,9 @@ use crate::error::{CoreError, Result};
 #[derive(Debug, Default)]
 pub(crate) struct ChatDriver {
     tg: Arc<TelegramMessenger>,
-    tg_offsets: Arc<RwLock<AHashMap<i64, i64>>>,
+    tg_offsets: Arc<RwLock<AHashMap<String, i64>>>,
     vk: Arc<VkMessenger>,
-    vk_offsets: Arc<RwLock<AHashMap<i64, i64>>>,
+    vk_offsets: Arc<RwLock<AHashMap<String, i64>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -65,7 +65,13 @@ impl ChatDriver {
     #[tracing::instrument(skip_all)]
     pub(crate) async fn initialise(&self, platform: &DbBotAccountWithMeta) -> Result<()> {
         if matches!(platform.platform.platform.api_id, ApiId::Telegram) {
-            let cred = TgCredentials::from_bytes(&platform.account.token)?;
+            let mirrors = platform
+                .platform
+                .mirrors
+                .iter()
+                .map(|m| m.url.clone())
+                .collect();
+            let cred = TgCredentials::from_bytes(&platform.account.token, mirrors)?;
             self.tg.ensure_polling_mode(&cred).await?;
         }
         Ok(())
@@ -117,16 +123,23 @@ impl ChatDriver {
             reply_markup,
         };
 
+        let mirrors = platform
+            .platform
+            .mirrors
+            .iter()
+            .map(|m| m.url.clone())
+            .collect();
+
         match platform.platform.platform.api_id {
             ApiId::Telegram => {
-                let cred = TgCredentials::from_bytes(&platform.account.token)?;
+                let cred = TgCredentials::from_bytes(&platform.account.token, mirrors)?;
                 self.tg
                     .send_message(&request, cred)
                     .await
                     .map_err(CoreError::ChatLib)
             }
             ApiId::Vk => {
-                let cred = VkCredentials::from_bytes(&platform.account.token)?;
+                let cred = VkCredentials::from_bytes(&platform.account.token, mirrors)?;
                 self.vk
                     .send_message(&request, cred)
                     .await
@@ -140,7 +153,7 @@ impl ChatDriver {
 #[tracing::instrument(skip_all)]
 async fn get_telegram(
     messenger: &TelegramMessenger,
-    offsets: &Arc<RwLock<AHashMap<i64, i64>>>,
+    offsets: &Arc<RwLock<AHashMap<String, i64>>>,
     platform: &DbBotAccountWithMeta,
 ) -> Result<ChatMessages> {
     let bot_acc = &platform.account;
@@ -149,17 +162,27 @@ async fn get_telegram(
     let offset = offsets
         .read()
         .await
-        .get(&bot_acc.pkey())
+        .get(&bot_acc.external_id)
         .copied()
         .unwrap_or(0);
-    let cred = TgCredentials::from_bytes(&bot_acc.token)?;
+    let mirrors = platform
+        .platform
+        .mirrors
+        .iter()
+        .map(|m| m.url.clone())
+        .collect();
+    let cred = TgCredentials::from_bytes(&bot_acc.token, mirrors)?;
 
     let (messages, new_offset) = messenger
         .fetch_messages(offset, cred)
         .await
         .map_err(CoreError::ChatLib)?;
 
-    *offsets.write().await.entry(bot_acc.pkey()).or_insert(0) = new_offset;
+    *offsets
+        .write()
+        .await
+        .entry(bot_acc.external_id.clone())
+        .or_insert(0) = new_offset;
 
     Ok(ChatMessages(messages))
 }
@@ -167,7 +190,7 @@ async fn get_telegram(
 #[tracing::instrument(skip_all)]
 async fn get_vk(
     messenger: &VkMessenger,
-    offsets: &Arc<RwLock<AHashMap<i64, i64>>>,
+    offsets: &Arc<RwLock<AHashMap<String, i64>>>,
     platform: &DbBotAccountWithMeta,
 ) -> Result<ChatMessages> {
     let bot_acc = &platform.account;
@@ -176,17 +199,27 @@ async fn get_vk(
     let offset = offsets
         .read()
         .await
-        .get(&bot_acc.pkey())
+        .get(&bot_acc.external_id)
         .copied()
         .unwrap_or(0);
-    let cred = VkCredentials::from_bytes(&bot_acc.token)?;
+    let mirrors = platform
+        .platform
+        .mirrors
+        .iter()
+        .map(|m| m.url.clone())
+        .collect();
+    let cred = VkCredentials::from_bytes(&bot_acc.token, mirrors)?;
 
     let (messages, new_offset) = messenger
         .fetch_messages(offset, cred)
         .await
         .map_err(CoreError::ChatLib)?;
 
-    *offsets.write().await.entry(bot_acc.pkey()).or_insert(0) = new_offset;
+    *offsets
+        .write()
+        .await
+        .entry(bot_acc.external_id.clone())
+        .or_insert(0) = new_offset;
 
     Ok(ChatMessages(messages))
 }

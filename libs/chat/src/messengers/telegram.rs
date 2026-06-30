@@ -4,36 +4,67 @@ use crate::error::{ChatError, Result};
 use crate::models::{Attachment, Platform, SendMessageRequest, UnifiedMessage};
 
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 #[derive(Clone)]
 pub struct TgCredentials {
     bot_token: String,
+    mirrors: Vec<String>,
+    current_index: Arc<AtomicUsize>,
 }
 
 impl TgCredentials {
     #[tracing::instrument(skip_all)]
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+    pub fn from_bytes(bytes: &[u8], mirrors: Vec<String>) -> Result<Self> {
+        if mirrors.is_empty() {
+            return Err(ChatError::Other(
+                "No mirrors provided for Telegram".to_string(),
+            ));
+        }
         let bot_token = String::from_utf8(bytes.to_vec()).map_err(|e| e.to_string())?;
-        Ok(Self { bot_token })
+        Ok(Self {
+            bot_token,
+            mirrors,
+            current_index: Arc::new(AtomicUsize::new(0)),
+        })
+    }
+
+    fn get_host(&self) -> &str {
+        let idx = self.current_index.load(Ordering::Relaxed);
+        &self.mirrors[idx % self.mirrors.len()]
+    }
+
+    fn next_host(&self) {
+        let idx = self.current_index.load(Ordering::Relaxed);
+        self.current_index
+            .store((idx + 1) % self.mirrors.len(), Ordering::Relaxed);
     }
 
     fn get_fetch_address(&self, offset: i64) -> String {
         format!(
-            "https://api.telegram.org/bot{}/getUpdates?offset={}&timeout=25",
-            self.bot_token, offset
+            "https://{}/bot{}/getUpdates?offset={}&timeout=25",
+            self.get_host(),
+            self.bot_token,
+            offset
         )
     }
 
     fn get_info_address(&self) -> String {
         format!(
-            "https://api.telegram.org/bot{}/deleteWebhook?drop_pending_updates=true",
+            "https://{}/bot{}/deleteWebhook?drop_pending_updates=true",
+            self.get_host(),
             self.bot_token
         )
     }
 
     fn get_send_address(&self) -> String {
-        format!("https://api.telegram.org/bot{}/sendMessage", self.bot_token)
+        format!(
+            "https://{}/bot{}/sendMessage",
+            self.get_host(),
+            self.bot_token
+        )
     }
 }
 
@@ -125,14 +156,29 @@ impl TelegramMessenger {
 
     #[tracing::instrument(skip_all)]
     pub async fn ensure_polling_mode(&self, cred: &TgCredentials) -> Result<()> {
-        let url = cred.get_info_address();
-        self.client
-            .get(&url)
-            .await
-            .map(|_| {
-                tracing::info!("[TG] Вебхук удален, режим Long Polling активирован.");
-            })
-            .map_err(ChatError::tg_webhook)
+        let max_attempts = cred.mirrors.len();
+        for _ in 0..max_attempts {
+            let url = cred.get_info_address();
+            match self.client.get(&url).await {
+                Ok(_) => {
+                    tracing::info!("[TG] Вебхук удален, режим Long Polling активирован.");
+                    return Ok(());
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "[TG] Не удалось удалить вебхук на хосте {}: {}",
+                        cred.get_host(),
+                        e
+                    );
+                    cred.next_host();
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            }
+        }
+        tracing::error!(
+            "[TG] Не удалось удалить вебхук ни на одном из хостов. Long polling может не работать."
+        );
+        Ok(())
     }
 }
 
@@ -145,59 +191,78 @@ impl Messenger for TelegramMessenger {
         offset: i64,
         cred: Self::Credentials,
     ) -> Result<(Vec<UnifiedMessage>, i64)> {
-        let url = cred.get_fetch_address(offset);
+        let max_attempts = cred.mirrors.len();
+        let mut attempts = 0;
 
-        let response_text = match self.client.get(&url).await {
-            Ok(text) => text,
-            Err(e) => {
-                tracing::error!("[TG] Сетевая ошибка: {}", e);
-                tokio::time::sleep(Duration::from_secs(3)).await;
-                return Ok((Vec::new(), offset));
-            }
-        };
+        loop {
+            let url = cred.get_fetch_address(offset);
 
-        let tg_response: TgUpdatesResponse =
-            serde_json::from_str(&response_text).map_err(ChatError::TgResponseParse)?;
+            match self.client.get(&url).await {
+                Ok(response_text) => {
+                    let tg_response: TgUpdatesResponse =
+                        serde_json::from_str(&response_text).map_err(ChatError::TgResponseParse)?;
 
-        if !tg_response.ok {
-            if let Some(desc) = tg_response.description {
-                tracing::warn!("[TG] API Warning: {}", desc);
-            }
-            return Ok((Vec::new(), offset));
-        }
+                    if !tg_response.ok {
+                        if let Some(desc) = tg_response.description {
+                            tracing::warn!("[TG] API Warning: {}", desc);
+                        }
+                        return Ok((Vec::new(), offset));
+                    }
 
-        let mut unified_messages = Vec::new();
-        let mut max_update_id = offset;
-        let mut received_any_update = false;
+                    let mut unified_messages = Vec::new();
+                    let mut max_update_id = offset;
+                    let mut received_any_update = false;
 
-        if let Some(updates) = tg_response.result {
-            for update in updates {
-                received_any_update = true;
-                max_update_id = max_update_id.max(update.update_id);
+                    if let Some(updates) = tg_response.result {
+                        for update in updates {
+                            received_any_update = true;
+                            max_update_id = max_update_id.max(update.update_id);
 
-                if let Some(msg) = update.message {
-                    let attachments = parse_attachments(&msg);
+                            if let Some(msg) = update.message {
+                                let attachments = parse_attachments(&msg);
 
-                    unified_messages.push(UnifiedMessage {
-                        platform: Platform::Telegram,
-                        user_id: msg.from.id.to_string(),
-                        chat_id: msg.chat.id.to_string(),
-                        text: msg.text.unwrap_or_else(|| "[Медиа]".to_string()),
-                        timestamp: msg.date,
-                        message_id: Some(msg.message_id.to_string()),
-                        attachments,
-                    });
+                                unified_messages.push(UnifiedMessage {
+                                    platform: Platform::Telegram,
+                                    user_id: msg.from.id.to_string(),
+                                    chat_id: msg.chat.id.to_string(),
+                                    text: msg.text.unwrap_or_else(|| "[Медиа]".to_string()),
+                                    timestamp: msg.date,
+                                    message_id: Some(msg.message_id.to_string()),
+                                    attachments,
+                                });
+                            }
+                        }
+                    }
+
+                    let new_offset = if received_any_update {
+                        max_update_id + 1
+                    } else {
+                        offset
+                    };
+
+                    return Ok((unified_messages, new_offset));
+                }
+                Err(e) => {
+                    attempts += 1;
+                    tracing::error!(
+                        "[TG] Сетевая ошибка на хосте {}: {}",
+                        cred.get_host(),
+                        e
+                    );
+
+                    if attempts >= max_attempts {
+                        tokio::time::sleep(Duration::from_secs(3)).await;
+                        return Err(ChatError::Other(format!(
+                            "All mirrors failed for getUpdates: {}",
+                            e
+                        )));
+                    }
+
+                    cred.next_host();
+                    tokio::time::sleep(Duration::from_secs(1)).await;
                 }
             }
         }
-
-        let new_offset = if received_any_update {
-            max_update_id + 1
-        } else {
-            offset
-        };
-
-        Ok((unified_messages, new_offset))
     }
 
     #[tracing::instrument(skip_all)]
@@ -206,8 +271,6 @@ impl Messenger for TelegramMessenger {
         request: &SendMessageRequest,
         cred: Self::Credentials,
     ) -> Result<()> {
-        let url = cred.get_send_address();
-
         let reply_id = request
             .reply_to_message_id
             .as_ref()
@@ -227,19 +290,42 @@ impl Messenger for TelegramMessenger {
             reply_markup: reply_markup_str,
         };
 
-        let response_text = self
-            .client
-            .post_json(&url, &payload)
-            .await
-            .map_err(|e| e.to_string())?;
+        let max_attempts = cred.mirrors.len();
+        let mut attempts = 0;
 
-        let tg_response: TgSendResponse =
-            serde_json::from_str(&response_text).map_err(ChatError::TgResponseParse)?;
+        loop {
+            let url = cred.get_send_address();
 
-        if !tg_response.ok {
-            Err(ChatError::tg_response(tg_response.description))
-        } else {
-            Ok(())
+            match self.client.post_json(&url, &payload).await {
+                Ok(response_text) => {
+                    let tg_response: TgSendResponse =
+                        serde_json::from_str(&response_text).map_err(ChatError::TgResponseParse)?;
+
+                    if !tg_response.ok {
+                        return Err(ChatError::tg_response(tg_response.description));
+                    } else {
+                        return Ok(());
+                    }
+                }
+                Err(e) => {
+                    attempts += 1;
+                    tracing::error!(
+                        "[TG] Сетевая ошибка при отправке на хосте {}: {}",
+                        cred.get_host(),
+                        e
+                    );
+
+                    if attempts >= max_attempts {
+                        return Err(ChatError::Other(format!(
+                            "All mirrors failed for sendMessage: {}",
+                            e
+                        )));
+                    }
+
+                    cred.next_host();
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            }
         }
     }
 }
