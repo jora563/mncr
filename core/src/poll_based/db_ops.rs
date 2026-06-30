@@ -10,9 +10,6 @@ use crate::messengers::ChatMessages;
 #[derive(Debug)]
 pub(super) struct StandardData {
     pub(super) user_account: DbUserAccount,
-    pub(super) user: DbUser,
-    pub(super) bot_account: DbBotAccount,
-    pub(super) project: DbProject,
     pub(super) ticket: DbTicket,
     pub(super) chat: DbChat,
 }
@@ -22,7 +19,6 @@ pub(super) enum ValidationOutcome {
     Ok(StandardData),
     NeedPhoneVerification {
         chat_ext_id: String,
-        user_ext_id: String,
     },
 }
 
@@ -57,7 +53,6 @@ pub(super) async fn check_validity_get_data(
     } else {
         return Ok(ValidationOutcome::NeedPhoneVerification {
             chat_ext_id: chat_ext_id.to_string(),
-            user_ext_id: user_acc_external_id.to_string(),
         });
     };
 
@@ -127,9 +122,6 @@ pub(super) async fn check_validity_get_data(
 
     Ok(ValidationOutcome::Ok(StandardData {
         user_account,
-        user,
-        bot_account: ba.to_owned(),
-        project: proj.to_owned(),
         ticket,
         chat,
     }))

@@ -1,7 +1,7 @@
 use super::Messenger;
 use crate::client::Client;
 use crate::error::{ChatError, Result};
-use crate::models::{Attachment, Platform, ReplyMarkup, SendMessageRequest, UnifiedMessage};
+use crate::models::{Attachment, Platform, SendMessageRequest, UnifiedMessage};
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
