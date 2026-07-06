@@ -41,6 +41,9 @@ impl CoreCtx {
             queue: (),
         })
     }
+    pub(crate) fn cfg(&self) -> &Config {
+        &self.cfg
+    }
     pub(crate) fn db(&self) -> &CoreDbPool {
         &self.db
     }

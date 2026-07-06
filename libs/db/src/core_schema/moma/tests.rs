@@ -570,15 +570,15 @@ async fn full_setup(pool: &PgPool) -> Setup {
     let user4_account1 = user4_account1.insert(pool).await.unwrap();
     let user5_account1 = user5_account1.insert(pool).await.unwrap();
 
-    let bot_account1 = DbNewBotAccount::new(&platform1, "RB1-001", b"password".to_vec());
-    let bot_account2 = DbNewBotAccount::new(&platform1, "RB1-002", b"password".to_vec());
-    let bot_account3 = DbNewBotAccount::new(&platform2, "RB2-001", b"password".to_vec());
-    let bot_account4 = DbNewBotAccount::new(&platform2, "RB2-002", b"password".to_vec());
-    let bot_account5 = DbNewBotAccount::new(&platform3, "RB3-001", b"password".to_vec());
-    let bot_account6 = DbNewBotAccount::new(&platform3, "RB3-002", b"password".to_vec());
-    let bot_account7 = DbNewBotAccount::new(&platform4, "RB4-001", b"password".to_vec());
-    let bot_account8 = DbNewBotAccount::new(&platform4, "RB4-002", b"password".to_vec());
-    let bot_account9 = DbNewBotAccount::new(&platform5, "RB5-001", b"password".to_vec());
+    let bot_account1 = DbNewBotAccount::new(&platform1, "RB1-001", None, b"password".to_vec());
+    let bot_account2 = DbNewBotAccount::new(&platform1, "RB1-002", None, b"password".to_vec());
+    let bot_account3 = DbNewBotAccount::new(&platform2, "RB2-001", None, b"password".to_vec());
+    let bot_account4 = DbNewBotAccount::new(&platform2, "RB2-002", None, b"password".to_vec());
+    let bot_account5 = DbNewBotAccount::new(&platform3, "RB3-001", None, b"password".to_vec());
+    let bot_account6 = DbNewBotAccount::new(&platform3, "RB3-002", None, b"password".to_vec());
+    let bot_account7 = DbNewBotAccount::new(&platform4, "RB4-001", None, b"password".to_vec());
+    let bot_account8 = DbNewBotAccount::new(&platform4, "RB4-002", None, b"password".to_vec());
+    let bot_account9 = DbNewBotAccount::new(&platform5, "RB5-001", None, b"password".to_vec());
 
     let bot_account1 = bot_account1.insert(pool).await.unwrap();
     let bot_account2 = bot_account2.insert(pool).await.unwrap();

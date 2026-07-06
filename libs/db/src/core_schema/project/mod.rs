@@ -1,5 +1,6 @@
 //! Модуль сущностей и функционала проекта.
 use db_derive::CoreDbCrud;
+use serde::{Deserialize, Serialize};
 use sqlx::types::time::PrimitiveDateTime;
 use sqlx::{FromRow, PgExecutor, PgPool};
 
@@ -7,7 +8,7 @@ use crate::core_schema::CoreDbCrud;
 use crate::error::{DbError, Result};
 
 /// Сущность проекта
-#[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq)]
+#[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq, Deserialize, Serialize)]
 #[core_db_table = "project"]
 pub struct DbProject {
     #[core_db_skip_insert]
@@ -27,12 +28,16 @@ pub struct DbProject {
 pub struct DbNewProject(DbProject);
 
 impl DbNewProject {
-    pub fn new(group: &DbProjectGroup, external_id: &str, name: &str) -> Self {
+    pub fn new<T: Into<String>, S: Into<String>>(
+        group: &DbProjectGroup,
+        external_id: T,
+        name: S,
+    ) -> Self {
         Self(DbProject {
             id: 0,
             project_group_id: group.id,
-            external_id: external_id.to_string(),
-            project_name: name.to_string(),
+            external_id: external_id.into(),
+            project_name: name.into(),
             created_on: PrimitiveDateTime::MIN,
             altered_on: None,
         })
@@ -94,7 +99,7 @@ impl DbProject {
 }
 
 /// Сущность группы к которой принадлежит проект
-#[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq)]
+#[derive(Clone, CoreDbCrud, Debug, Deserialize, FromRow, PartialEq, Serialize)]
 #[core_db_table = "project_group"]
 pub struct DbProjectGroup {
     #[core_db_skip_insert]
@@ -112,11 +117,11 @@ pub struct DbProjectGroup {
 pub struct DbNewProjectGroup(DbProjectGroup);
 
 impl DbNewProjectGroup {
-    pub fn new(external: &str, name: &str) -> Self {
+    pub fn new<T: Into<String>, S: Into<String>>(external: T, name: S) -> Self {
         Self(DbProjectGroup {
             id: 0,
-            external_id: external.to_string(),
-            group_name: name.to_string(),
+            external_id: external.into(),
+            group_name: name.into(),
             created_on: PrimitiveDateTime::MIN,
             altered_on: None,
         })
@@ -137,10 +142,18 @@ impl DbProjectGroup {
             group: self,
         })
     }
+
+    /// Достать все группы.
+    pub async fn get_all<'a, E: PgExecutor<'a>>(ex: E) -> Result<Vec<DbProjectGroup>> {
+        sqlx::query_as::<_, DbProjectGroup>("SELECT * FROM project_group ORDER BY group_name ASC")
+            .fetch_all(ex)
+            .await
+            .map_err(Into::into)
+    }
 }
 
 /// Сущность группы со всеми её проектами.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct DbFullProjectGroup {
     pub group: DbProjectGroup,
     pub projects: Vec<DbProject>,

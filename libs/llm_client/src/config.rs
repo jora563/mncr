@@ -19,7 +19,7 @@ macro_rules! set_fields {
 }
 
 /// Конфигурация которая используется для "настройки" модели.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub struct LlmRequestCfg {
     max_tokens: Option<u32>,
@@ -64,7 +64,7 @@ impl LlmRequestCfg {
 }
 
 /// Конфигурация которая используется для настройки клиента.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub struct LlmClientCfg {
     pub host: String,

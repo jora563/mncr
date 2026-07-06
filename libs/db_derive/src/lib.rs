@@ -69,7 +69,7 @@ pub fn db_crud(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
             /// Вставить, вернуть его ид
             pub(crate) async fn insert<'a, T:  sqlx::PgExecutor<'a>>(&mut self, exc: T) -> crate::error::Result<i64> {
-                let new_self = sqlx::query_as::<_, Self>(#insert_str)
+                let new_self = sqlx::query_as::<_, Self>(sqlx::AssertSqlSafe(#insert_str as &str))
                     #( .bind(&self.#insert_fields) )*
                     .fetch_one(exc)
                     .await?;
@@ -78,7 +78,7 @@ pub fn db_crud(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             }
 
             pub async fn update<'a, T: sqlx::PgExecutor<'a>>(&self, exc: T) -> crate::error::Result<()> {
-                sqlx::query(#update_str)
+                sqlx::query(sqlx::AssertSqlSafe(#update_str as &str))
                     #( .bind(&self.#insert_fields) )*
                     .bind(self.pkey())
                     .execute(exc)
@@ -89,7 +89,7 @@ pub fn db_crud(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             /// Достать. NB: Если используем `#[core_db_id]` и ключ не настоящий, то достаём только первый
             /// Случай. Фунцкии чтобы достать все надо делать в ручную (но они и не есть CRUD).
             pub async fn get_by_id<'a, T: sqlx::PgExecutor<'a>>(id: i64, exc: T) -> crate::error::Result<Self> {
-                sqlx::query_as::<_, Self>(#get_by_id_str)
+                sqlx::query_as::<_, Self>(sqlx::AssertSqlSafe(#get_by_id_str as &str))
                     .bind(id)
                     .fetch_one(exc)
                     .await
@@ -98,7 +98,7 @@ pub fn db_crud(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
             /// Удалить
             pub async fn delete_by_id<'a, T: sqlx::PgExecutor<'a>>(id: i64, exc: T) -> crate::error::Result<()> {
-                sqlx::query(#delete_str)
+                sqlx::query(sqlx::AssertSqlSafe(#delete_str as &str))
                     .bind(id)
                     .execute(exc)
                     .await?;
@@ -128,7 +128,7 @@ pub fn db_crud(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 V: for<'q>sqlx::Encode<'q, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>
             {
                 let query = format!("SELECT * FROM {} WHERE {field} = $1", Self::TABLE);
-                sqlx::query_as::<_, Self>(&query)
+                sqlx::query_as::<_, Self>(sqlx::AssertSqlSafe(&query as &str))
                     .bind(v)
                     .fetch_all(exc)
                     .await

@@ -10,14 +10,13 @@ use std::sync::Arc;
 use tokio::task as tt;
 
 #[tracing::instrument(skip_all)]
-pub(crate) async fn run_core(ctx: CoreCtx) -> Result<()> {
+pub(crate) async fn run_core(ctx: Arc<CoreCtx>) -> Result<()> {
     let bot_metadata = ctx
         .load_initial_platforms()
         .await
         .inspect_err(|e| tracing::error!("Error loading platforms: {e}"))?;
 
     let mut handles = tt::JoinSet::new();
-    let ctx = Arc::new(ctx);
 
     tracing::info!("Loaded {} bots, preparing to process.", bot_metadata.len());
     for bm in bot_metadata {
@@ -45,6 +44,14 @@ async fn run_platform(ctx: Arc<CoreCtx>, meta: DbBotAccountWithMeta) -> Result<(
             Ok(m) => m,
             Err(e) if e.is_critical() => return Err(e),
             Err(e) => {
+                tracing::error!(
+                    "Error for {} on {}: {e}",
+                    meta.account.external_id,
+                    meta.platform.platform.name
+                );
+                // Подождать, чтобы СПУ не съедать.
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                continue 'poll_loop;
                 tracing::error!("Error for {}: {e}", meta.account.external_id);
                 continue;
             }

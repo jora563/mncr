@@ -1,6 +1,7 @@
 //! Сущности бота
 use ahash::AHashMap;
 use db_derive::CoreDbCrud;
+use serde::{Deserialize, Serialize};
 use sqlx::types::time::PrimitiveDateTime;
 use sqlx::{FromRow, PgExecutor, PgPool};
 
@@ -8,7 +9,7 @@ use crate::core_schema::{CoreDbCrud, DbFullPlatform, DbPlatform, DbPlatformMirro
 use crate::error::{DbError, Result};
 
 /// Сущность проекта
-#[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq)]
+#[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq, Deserialize, Serialize)]
 #[core_db_table = "bot_account"]
 pub struct DbBotAccount {
     #[core_db_skip_insert]
@@ -29,12 +30,17 @@ pub struct DbNewBotAccount(DbBotAccount);
 
 impl DbNewBotAccount {
     /// Создать новую учётную запись бота до вставления в БД.
-    pub fn new(platform: &DbPlatform, external_id: &str, token: Vec<u8>) -> Self {
+    pub fn new<T: Into<String>>(
+        platform: &DbPlatform,
+        external_id: T,
+        ex: Option<i64>,
+        token: Vec<u8>,
+    ) -> Self {
         Self(DbBotAccount {
             id: 0,
             platform_id: platform.pkey(),
-            external_id: external_id.to_string(),
-            expiry_time_hours: None,
+            external_id: external_id.into(),
+            expiry_time_hours: ex,
             token,
         })
     }
@@ -102,7 +108,7 @@ impl DbBotAccount {
 }
 
 /// Описания бота
-#[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq)]
+#[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq, Serialize)]
 #[core_db_table = "bot"]
 pub struct DbBot {
     #[core_db_skip_insert]
@@ -213,35 +219,36 @@ impl DbFullBotAccount {
 use crate::core_schema::DbProject;
 
 /// Сущность Учётной записи бота с платформой которая ему принадлежит.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct DbBotAccountWithMeta {
     pub account: DbBotAccount,
     pub platform: DbFullPlatform,
     pub project: DbProject,
 }
 
+type MetaRet = (
+    i64,
+    i64,
+    String,
+    Option<i64>,
+    Vec<u8>,
+    i64,
+    crate::core_schema::ApiId,
+    String,
+    PrimitiveDateTime,
+    Option<PrimitiveDateTime>,
+    i64,
+    i64,
+    String,
+    String,
+    PrimitiveDateTime,
+    Option<PrimitiveDateTime>,
+);
+
 impl DbBotAccountWithMeta {
     /// TODO: Do we need to dedup here? To be decided based on schema.
     pub async fn get_all(ex: &PgPool) -> Result<Vec<Self>> {
-        type Ret = (
-            i64,
-            i64,
-            String,
-            Option<i64>,
-            Vec<u8>,
-            i64,
-            crate::core_schema::ApiId,
-            String,
-            PrimitiveDateTime,
-            Option<PrimitiveDateTime>,
-            i64,
-            i64,
-            String,
-            String,
-            PrimitiveDateTime,
-            Option<PrimitiveDateTime>,
-        );
-        let results = sqlx::query_as::<_, Ret>(
+        let results = sqlx::query_as::<_, MetaRet>(
             "SELECT b.*, pl.*, proj.* FROM bot_account b
                 INNER JOIN platform pl ON b.platform_id = pl.id
                 INNER JOIN bot_account_project bap ON bap.account_id = b.id
@@ -249,15 +256,44 @@ impl DbBotAccountWithMeta {
                 ORDER BY b.id ASC, pl.id",
         )
         .fetch_all(ex);
+
         let mirrors = sqlx::query_as::<_, DbPlatformMirror>(
             "SELECT * FROM platform_mirror ORDER BY platform_id DESC",
         )
         .fetch_all(ex);
-        let (results, mirrors) = tokio::join!(results, mirrors);
-        let (results, mirrors) = (results?, mirrors?);
 
-        let mut ret = Vec::with_capacity(results.len());
-        for (a1, a2, a3, a4, a5, pl1, pl2, pl3, pl4, pl5, p1, p2, p3, p4, p5, p6) in results {
+        let (results, mirrors) = tokio::join!(results, mirrors);
+        let ret = Self::sort_results(results?, mirrors?);
+
+        Ok(ret)
+    }
+
+    /// TODO: Do we need to dedup here? To be decided based on schema.
+    pub async fn get_for_project(proj_id: i64, ex: &PgPool) -> Result<Vec<Self>> {
+        let results = sqlx::query_as::<_, MetaRet>(
+            "SELECT b.*, pl.*, proj.* FROM bot_account b
+                INNER JOIN platform pl ON b.platform_id = pl.id
+                INNER JOIN bot_account_project bap ON bap.account_id = b.id
+                INNER JOIN project proj ON proj.id = bap.project_id AND proj.id = $1
+                ORDER BY b.id ASC, pl.id",
+        )
+        .bind(proj_id)
+        .fetch_all(ex);
+
+        let mirrors = sqlx::query_as::<_, DbPlatformMirror>(
+            "SELECT * FROM platform_mirror ORDER BY platform_id DESC",
+        )
+        .fetch_all(ex);
+
+        let (results, mirrors) = tokio::join!(results, mirrors);
+        let ret = Self::sort_results(results?, mirrors?);
+
+        Ok(ret)
+    }
+
+    fn sort_results(res: Vec<MetaRet>, mirrors: Vec<DbPlatformMirror>) -> Vec<Self> {
+        let mut ret = Vec::with_capacity(res.len());
+        for (a1, a2, a3, a4, a5, pl1, pl2, pl3, pl4, pl5, p1, p2, p3, p4, p5, p6) in res {
             let platform = DbPlatform::from_tuple((pl1, pl2, pl3, pl4, pl5));
             // Since platforms are repeated, we will clone mirrors.
             let mirrors = mirrors
@@ -271,7 +307,7 @@ impl DbBotAccountWithMeta {
                 project: DbProject::from_tuple((p1, p2, p3, p4, p5, p6)),
             });
         }
-        Ok(ret)
+        ret
     }
 }
 

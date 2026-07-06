@@ -27,7 +27,7 @@ async fn test_validate_chat() {
 
                 let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
                 let bot_account =
-                    DbNewBotAccount::new(&platform, "RB-890123", b"password".to_vec());
+                    DbNewBotAccount::new(&platform, "RB-890123",None  , b"password".to_vec());
 
                 let user_account = user_account.insert(&pool).await.unwrap();
                 let bot_account = bot_account.insert(&pool).await.unwrap();
@@ -137,7 +137,8 @@ async fn test_chat_crud() {
                 .unwrap();
 
             let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
-            let bot_account = DbNewBotAccount::new(&platform, "RB-890123", b"password".to_vec());
+            let bot_account =
+                DbNewBotAccount::new(&platform, "RB-890123", None, b"password".to_vec());
 
             let user_account = user_account.insert(&pool).await.unwrap();
             let bot_account = bot_account.insert(&pool).await.unwrap();
@@ -218,7 +219,8 @@ async fn test_full_chat() {
                 .unwrap();
 
             let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
-            let bot_account = DbNewBotAccount::new(&platform, "RB-890123", b"password".to_vec());
+            let bot_account =
+                DbNewBotAccount::new(&platform, "RB-890123", None, b"password".to_vec());
 
             let user_account = user_account.insert(&pool).await.unwrap();
             let bot_account = bot_account.insert(&pool).await.unwrap();
@@ -405,11 +407,11 @@ async fn test_message_validate() {
                 let user_account2 = DbNewUserAccount::new(&user, &platform, "PWRR-002", "Red2");
                 let user_account3 = DbNewUserAccount::new(&user, &platform2, "PWRR-003", "Red3");
                 let bot_account =
-                    DbNewBotAccount::new(&platform, "RB-890123", b"password".to_vec());
+                    DbNewBotAccount::new(&platform, "RB-890123",None , b"password".to_vec());
                 let bot_account2 =
-                    DbNewBotAccount::new(&platform, "RB-890124", b"password".to_vec());
+                    DbNewBotAccount::new(&platform, "RB-890124",None , b"password".to_vec());
                 let bot_account3 =
-                    DbNewBotAccount::new(&platform2, "RB-890125", b"password".to_vec());
+                    DbNewBotAccount::new(&platform2, "RB-890125",None , b"password".to_vec());
 
                 let user_account = user_account.insert(&pool).await.unwrap();
                 let user_account2 = user_account2.insert(&pool).await.unwrap();
@@ -604,7 +606,7 @@ async fn test_message_crud() {
 
                 let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
                 let bot_account =
-                    DbNewBotAccount::new(&platform, "RB-890123", b"password".to_vec());
+                    DbNewBotAccount::new(&platform, "RB-890123",None , b"password".to_vec());
 
                 let user_account = user_account.insert(&pool).await.unwrap();
                 let bot_account = bot_account.insert(&pool).await.unwrap();
@@ -699,7 +701,7 @@ async fn test_full_message_single_and_many() {
 
                 let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
                 let bot_account =
-                    DbNewBotAccount::new(&platform, "RB-890123", b"password".to_vec());
+                    DbNewBotAccount::new(&platform, "RB-890123",None , b"password".to_vec());
 
                 let user_account = user_account.insert(&pool).await.unwrap();
                 let bot_account = bot_account.insert(&pool).await.unwrap();

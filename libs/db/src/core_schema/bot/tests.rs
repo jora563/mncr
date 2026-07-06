@@ -19,7 +19,7 @@ async fn test_bot_crud() {
                 .unwrap();
 
             let mut bot_account =
-                DbNewBotAccount::new(&platform, "RB-890123", b"password".to_vec())
+                DbNewBotAccount::new(&platform, "RB-890123", None, b"password".to_vec())
                     .insert(&pool)
                     .await
                     .unwrap();
@@ -63,10 +63,11 @@ async fn test_bot_account_crud() {
                 .await
                 .unwrap();
 
-            let bot_account = DbNewBotAccount::new(&platform, "RB-890123", b"password".to_vec())
-                .insert(&pool)
-                .await
-                .unwrap();
+            let bot_account =
+                DbNewBotAccount::new(&platform, "RB-890123", None, b"password".to_vec())
+                    .insert(&pool)
+                    .await
+                    .unwrap();
 
             let mut bot = DbNewBot::new(&bot_account, "The Fake Ranger")
                 .insert(&pool)
@@ -106,12 +107,13 @@ async fn test_full_bot() {
                 .await
                 .unwrap();
 
-            let bot_account = DbNewBotAccount::new(&platform, "RB-890123", b"password".to_vec())
-                .insert(&pool)
-                .await
-                .unwrap();
+            let bot_account =
+                DbNewBotAccount::new(&platform, "RB-890123", None, b"password".to_vec())
+                    .insert(&pool)
+                    .await
+                    .unwrap();
 
-            DbNewBotAccount::new(&platform, "RB-890999", b"password2".to_vec())
+            DbNewBotAccount::new(&platform, "RB-890999", None, b"password2".to_vec())
                 .insert(&pool)
                 .await
                 .unwrap();
@@ -189,12 +191,12 @@ async fn test_get_bots_for_platforms() {
 
             let mut full_platforms = Vec::new();
             for p in platforms.iter() {
-                DbNewBotAccount::new(p, &format!("{}-1", p.name), b"password".to_vec())
+                DbNewBotAccount::new(p, format!("{}-1", p.name), None, b"password".to_vec())
                     .insert(&pool)
                     .await
                     .unwrap();
 
-                DbNewBotAccount::new(p, &format!("{}-2", p.name), b"password2".to_vec())
+                DbNewBotAccount::new(p, format!("{}-2", p.name), None, b"password2".to_vec())
                     .insert(&pool)
                     .await
                     .unwrap();
@@ -271,15 +273,17 @@ async fn test_get_bots_with_meta() {
 
             let mut bot_accounts = Vec::new();
             for p in platforms.iter() {
-                let b1 = DbNewBotAccount::new(p, &format!("{}-1", p.name), b"password".to_vec())
-                    .insert(&pool)
-                    .await
-                    .unwrap();
+                let b1 =
+                    DbNewBotAccount::new(p, format!("{}-1", p.name), None, b"password".to_vec())
+                        .insert(&pool)
+                        .await
+                        .unwrap();
 
-                let b2 = DbNewBotAccount::new(p, &format!("{}-2", p.name), b"password2".to_vec())
-                    .insert(&pool)
-                    .await
-                    .unwrap();
+                let b2 =
+                    DbNewBotAccount::new(p, format!("{}-2", p.name), None, b"password2".to_vec())
+                        .insert(&pool)
+                        .await
+                        .unwrap();
 
                 DbBotAccountProject::link(&b1, &project1, &pool)
                     .await
@@ -346,7 +350,7 @@ async fn test_get_bots_ticket_expiry() {
                 .await
                 .unwrap();
 
-            let mut b1 = DbNewBotAccount::new(&platform, "Super bot", b"password".to_vec())
+            let mut b1 = DbNewBotAccount::new(&platform, "Super bot", None, b"password".to_vec())
                 .insert(&pool)
                 .await
                 .unwrap();

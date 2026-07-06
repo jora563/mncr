@@ -4,6 +4,7 @@ use super::config::ConfigDriver;
 use super::db_list::{DbList, NameDb};
 use super::{DB_LIST, DbLock, Result};
 
+use sqlx::AssertSqlSafe;
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::{Acquire, Connection, Database, Executor, Pool, Postgres};
 use std::ops::Deref;
@@ -45,7 +46,9 @@ where
         let fixture = std::fs::read_to_string(&path).inspect_err(|e| {
             println!("Error reading fixture file from '{path:?}': {e}");
         })?;
-        sqlx::raw_sql(&fixture).execute(&mut *conn).await?;
+        sqlx::raw_sql(AssertSqlSafe(fixture))
+            .execute(&mut *conn)
+            .await?;
     }
     Ok(())
 }
@@ -157,7 +160,9 @@ where
     // next test is allowed to begin.
     let e = std::time::Instant::now();
     let mut tx = cleanup_conn.begin().await?;
-    sqlx::raw_sql(&cleanup_script).execute(&mut *tx).await?;
+    sqlx::raw_sql(AssertSqlSafe(cleanup_script))
+        .execute(&mut *tx)
+        .await?;
     tx.commit().await?;
     println!("Cleanup: {:?}", e.elapsed());
 

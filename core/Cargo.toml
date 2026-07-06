@@ -11,6 +11,7 @@ llm = { path = "../libs/llm" }
 llm-client = { path = "../libs/llm_client" }
 queue = { path = "../libs/queue" }
 
+actix-web.workspace = true
 ahash.workspace = true
 serde.workspace = true
 sqlx.workspace = true
@@ -26,3 +27,6 @@ tokio = { workspace = true, features = [
 tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true
+
+[dev-dependencies]
+reqwest.workspace = true

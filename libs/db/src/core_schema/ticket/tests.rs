@@ -119,7 +119,8 @@ async fn test_full_ticket() {
             let user = user.insert(&pool).await.unwrap();
 
             let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
-            let bot_account = DbNewBotAccount::new(&platform, "RB-890123", b"password".to_vec());
+            let bot_account =
+                DbNewBotAccount::new(&platform, "RB-890123", None, b"password".to_vec());
 
             let user_account = user_account.insert(&pool).await.unwrap();
             let bot_account = bot_account.insert(&pool).await.unwrap();

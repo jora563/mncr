@@ -26,7 +26,7 @@ pub trait MoMa {
             field_a = Self::FIELD_A,
             field_b = Self::FIELD_B,
         );
-        sqlx::query(&query)
+        sqlx::query(sqlx::AssertSqlSafe(&query as &str))
             .bind(a.pkey())
             .bind(b.pkey())
             .execute(ex)
@@ -46,7 +46,7 @@ pub trait MoMa {
             field_a = Self::FIELD_A,
             field_b = Self::FIELD_B,
         );
-        sqlx::query(&query)
+        sqlx::query(sqlx::AssertSqlSafe(&query as &str))
             .bind(a.pkey())
             .bind(b.pkey())
             .execute(ex)
@@ -65,7 +65,7 @@ pub trait MoMa {
             field_a = Self::FIELD_A,
             field_b = Self::FIELD_B,
         );
-        let exists = sqlx::query_as::<_, (bool,)>(&query)
+        let exists = sqlx::query_as::<_, (bool,)>(sqlx::AssertSqlSafe(&query as &str))
             .bind(a.pkey())
             .bind(b.pkey())
             .fetch_one(ex)

@@ -23,14 +23,14 @@ ___
 CREATE USER aio_core WITH SUPERUSER PASSWORD 'password';
 CREATE DATABASE aio_core;
 ALTER DATABASE aio_core OWNER TO aio_core;
-GRANT ALL ON DATABASE aio_core TO aio_core; 
+GRANT ALL ON DATABASE aio_core TO aio_core;
 ```
 3. Зайти пользователям `aio_core` в клиент postgresql и создать БД `ai_omni_test_db_1`.
 4. Запустить AIOMNI Core `AI_OMNI_CONFIG_PATH=.test-settings/ai_omni_core_settings.toml cargo run --bin core` из корневой директории проекта. Приложение проработает несколько секунд, и проведёт изначальные миграции БД.
 5. Через клиент postgresql залить базовые данные `.test-settings/2026-06-19-OMNIAI-6-core-min.sql` в базу данных. При этом надо проставить правильные креды для бота ТГ и ВК (иначе запросы будут падать).
 6. Запустить сервер localai, проверить что правильный ЛЛМ есть в наличии и что в `.test-settings/ai_omni_core_settings.toml` правильно прописаны адрес запроса и наименование модели.
 7. Теперь можно полноценно запускать AIOMNI Core из корневой папки через любую из этих команд:
-    - `AI_OMNI_CONFIG_PATH=.test-settings/ai_omni_core_settings.toml cargo run --bin core`
+    - `AI_OMNI_CONFIG_PATH=.test-settings/ai_omni_core_settings.toml cargo run --bin ai-omni-core`
     - `AI_OMNI_CONFIG_PATH=.test-settings/ai_omni_core_settings.toml target/debug/ai-omni-core`
 
 ___

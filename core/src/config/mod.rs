@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Уровень логгирования
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum TracingLevel {
     #[default]
@@ -69,7 +69,7 @@ impl IntoChatApi for Platform {
 }
 
 // Настройки чат адаптера
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct ChatConfig {
     apis: Vec<Platform>,
 }
@@ -82,7 +82,7 @@ impl ChatConfig {
 }
 
 /// Структура конфигурации ЛЛМ.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct LlmConfig {
     request: LlmRequestCfg,
     client: LlmClientCfg,
@@ -90,7 +90,7 @@ pub struct LlmConfig {
 
 /// Общая сущность настроек.
 /// ТОДО: Настройки модулей будут подключатся по ходу их исполнения.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct Config {
     chat: ChatConfig,
     core: CoreSettings,
@@ -99,7 +99,7 @@ pub struct Config {
 }
 
 /// Настройки центрального приложения.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CoreSettings {
     pub(crate) threads: u16,
     pub(crate) blocking_threads: u16,
@@ -110,6 +110,15 @@ pub struct CoreSettings {
     /// Папка куда складываются логи, если мы их записываем
     /// Если не указана, то логи не записываются.
     pub(crate) log_dir: Option<String>,
+    /// Настройка порта сервера
+    pub(crate) server_port: u16,
+    /// Максимальное число рабочих нитей которые отданы серверу.
+    /// см. <https://docs.rs/actix-web/latest/actix_web/struct.HttpServer.html#method.workers>
+    pub(crate) server_worker_count: u8,
+    /// Максимальное число блокирующих нитей которые отданы на каждую
+    /// рабочею нить сервера.
+    /// см. <https://docs.rs/actix-web/latest/actix_web/struct.HttpServer.html#method.worker_max_blocking_threads>
+    pub(crate) server_max_blocking_threads: u8,
 }
 
 impl Default for CoreSettings {
@@ -120,6 +129,9 @@ impl Default for CoreSettings {
             log_level: TracingLevel::Info,
             record_logs: false,
             log_dir: None,
+            server_port: 8081,
+            server_worker_count: 2,
+            server_max_blocking_threads: 2,
         }
     }
 }

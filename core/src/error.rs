@@ -34,6 +34,10 @@ pub(crate) enum CoreError {
     LlmError(llm_client::LlmError),
     #[error("An error occurred: {0}")]
     Other(String),
+    #[error("Http server error: {0}")]
+    Http(#[from] actix_web::error::HttpError),
+    #[error("Cannot parse string as integer: {0}")]
+    Parse(#[from] std::num::ParseIntError),
     #[error("Queue interface error")]
     QueueError,
 }
@@ -44,6 +48,12 @@ impl CoreError {
         false
     }
 }
+
+// impl From<actix_web::error::HttpError> for CoreError {
+//     fn from(a: actix_web::error::HttpError) -> Self {
+//         Self::Http(a.to_string())
+//     }
+// }
 
 impl From<llm_client::LlmError> for CoreError {
     fn from(e: llm_client::LlmError) -> Self {

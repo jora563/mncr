@@ -1,12 +1,13 @@
 //! Сущности платформы
 use db_derive::CoreDbCrud;
+use serde::{Deserialize, Serialize};
 use sqlx::types::time::PrimitiveDateTime;
 use sqlx::{FromRow, PgExecutor, PgPool};
 
 use crate::core_schema::CoreDbCrud;
 use crate::error::Result;
 
-#[derive(Clone, Copy, Debug, PartialEq, sqlx::Type)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, sqlx::Type, Serialize)]
 #[repr(i16)]
 #[sqlx(type_name = "SMALLINT")]
 pub enum ApiId {
@@ -24,7 +25,7 @@ impl std::fmt::Display for ApiId {
 }
 
 /// Платформа, или её инстанция.
-#[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq)]
+#[derive(Clone, CoreDbCrud, Debug, Deserialize, FromRow, PartialEq, Serialize)]
 #[core_db_table = "platform"]
 pub struct DbPlatform {
     #[core_db_skip_insert]
@@ -99,7 +100,7 @@ impl DbPlatform {
 }
 
 /// Адреса платформы
-#[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq)]
+#[derive(Clone, CoreDbCrud, Debug, Deserialize, FromRow, PartialEq, Serialize)]
 #[core_db_table = "platform_mirror"]
 pub struct DbPlatformMirror {
     #[core_db_id]
@@ -159,7 +160,7 @@ impl DbPlatformMirror {
 }
 
 /// Платформа с адресами
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct DbFullPlatform {
     /// Платформа
     pub platform: DbPlatform,

@@ -6,6 +6,7 @@ use crate::context::CoreCtx;
 use crate::error::Result;
 
 use std::env::{VarError, var};
+use std::sync::Arc;
 use tokio::runtime::Builder;
 
 fn main() -> Result<()> {
@@ -43,19 +44,26 @@ async fn inner_main(config: Config) -> Result<()> {
         .inspect_err(|e| tracing::error!("Migation failure on launch: {e}"))?;
     tracing::info!("Upwards migrations completed.");
 
-    let poll_fut = tokio::task::spawn(poll_based::run_core(ctx));
+    let core = Arc::new(ctx);
+    let http_fut = tokio::task::spawn(http_server::run_server(core.clone()));
+    let poll_fut = tokio::task::spawn(poll_based::run_core(core));
     tracing::info!("Client-like polling core created.");
 
     // Этот подход позволяет нам потом добавить ешё и серверной компонент.
-    let (polled,) = tokio::join!(poll_fut);
+    tokio::select!(
+        poll = poll_fut => check_finish("poller", poll.map_err(Into::into)),
+        http = http_fut => check_finish("server", http.map_err(Into::into)),
+    );
     tracing::info!("Cores joined.");
-
-    match polled.map_err(Into::into) {
-        Ok(Ok(_)) => tracing::info!("Client-like polling core result is OK"),
-        Ok(Err(e)) | Err(e) => tracing::error!("Client-like polling core ended with error: {e}"),
-    };
     tracing::warn!("Shutting down AI Omni Core");
     Ok(())
+}
+
+fn check_finish(kind: &str, r: Result<Result<()>>) {
+    match r {
+        Ok(_) => tracing::warn!("{kind} has finished. Shutting down"),
+        Err(e) => tracing::error!("{kind} has finished with error. Shutting down: {e}"),
+    }
 }
 
 /// Установить крюк который будет сбрасывать панику в логи (а не просто печатать).
@@ -85,6 +93,7 @@ fn set_panic_hook<'a, 'b>(meta: &'a tokio::runtime::TaskMeta<'b>) {
 mod config;
 mod context;
 mod error;
+mod http_server;
 mod llm;
 mod log;
 mod messengers;
