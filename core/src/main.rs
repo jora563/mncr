@@ -4,7 +4,6 @@
 use crate::config::Config;
 use crate::context::CoreCtx;
 use crate::error::Result;
-
 use std::env::{VarError, var};
 use std::sync::Arc;
 use tokio::runtime::Builder;
@@ -50,10 +49,11 @@ async fn inner_main(config: Config) -> Result<()> {
     tracing::info!("Client-like polling core created.");
 
     // Этот подход позволяет нам потом добавить ешё и серверной компонент.
-    tokio::select!(
+    tokio::select!{
         poll = poll_fut => check_finish("poller", poll.map_err(Into::into)),
         http = http_fut => check_finish("server", http.map_err(Into::into)),
-    );
+    }
+
     tracing::info!("Cores joined.");
     tracing::warn!("Shutting down AI Omni Core");
     Ok(())

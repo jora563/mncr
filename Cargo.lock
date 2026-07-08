@@ -226,6 +226,7 @@ dependencies = [
  "queue",
  "reqwest",
  "serde",
+ "serde_json",
  "sqlx",
  "thiserror",
  "time",

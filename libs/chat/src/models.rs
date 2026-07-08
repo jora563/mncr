@@ -16,6 +16,9 @@ pub enum Attachment {
         phone: String,
         first_name: String,
         last_name: Option<String>,
+        /// ID пользователя в мессенджере, если контакт соответствует пользователю.
+        /// Используется для проверки что пользователь отправил свой собственный контакт.
+        user_id: Option<String>,
     },
     Photo {
         file_id: String,

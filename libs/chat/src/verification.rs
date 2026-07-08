@@ -30,6 +30,14 @@ pub fn extract_name(msg: &UnifiedMessage) -> Option<String> {
     })
 }
 
+/// Извлечь user_id из вложения-контакта (если контакт соответствует пользователю)
+pub fn extract_contact_user_id(msg: &UnifiedMessage) -> Option<String> {
+    msg.attachments.iter().find_map(|a| match a {
+        Attachment::Contact { user_id, .. } => user_id.clone(),
+        _ => None,
+    })
+}
+
 /// Проверить, содержит ли сообщение только контакт (без осмысленного текста)
 pub fn is_contact_only(msg: &UnifiedMessage) -> bool {
     let has_contact = msg

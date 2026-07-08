@@ -19,6 +19,11 @@ pub(super) enum ValidationOutcome {
     Ok(StandardData),
     NeedPhoneVerification {
         chat_ext_id: String,
+        user_ext_id: String,
+    },
+    InvalidContact {
+        chat_ext_id: String,
+        user_ext_id: String,
     },
 }
 
@@ -38,6 +43,31 @@ pub(super) async fn check_validity_get_data(
     let proj = &meta.project;
     let platform = &meta.platform.platform;
 
+    // Если сообщение содержит контакт, проверяем что он принадлежит пользователю
+    if messages.is_contact_only() {
+        let contact_user_id = messages.contact_user_id();
+        let sender_user_id = messages.user_external_id();
+
+        match contact_user_id {
+            Some(ref contact_uid) if contact_uid == sender_user_id => {
+                // Контакт принадлежит отправителю - всё ок
+                tracing::info!("Contact belongs to sender {}", sender_user_id);
+            }
+            _ => {
+                // Контакт не принадлежит отправителю или не имеет user_id
+                tracing::warn!(
+                    "Invalid contact: sender={}, contact_user_id={:?}",
+                    sender_user_id,
+                    contact_user_id
+                );
+                return Ok(ValidationOutcome::InvalidContact {
+                    chat_ext_id: chat_ext_id.to_string(),
+                    user_ext_id: user_acc_external_id.to_string(),
+                });
+            }
+        }
+    }
+
     // Проверяем существование учётной записи
     let ua = match DbUserAccount::get_by_external_id(user_acc_external_id, pool).await {
         Ok(user) => Some(user),
@@ -53,6 +83,7 @@ pub(super) async fn check_validity_get_data(
     } else {
         return Ok(ValidationOutcome::NeedPhoneVerification {
             chat_ext_id: chat_ext_id.to_string(),
+            user_ext_id: user_acc_external_id.to_string(),
         });
     };
 

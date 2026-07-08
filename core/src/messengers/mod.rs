@@ -1,4 +1,5 @@
 //! Модуль логики работы с чатами
+
 use ahash::AHashMap;
 use chat::messengers::{Messenger, TelegramMessenger, TgCredentials, VkCredentials, VkMessenger};
 use chat::models::{ReplyMarkup, SendMessageRequest, UnifiedMessage};
@@ -46,6 +47,13 @@ impl ChatMessages {
 
     pub(crate) fn is_contact_only(&self) -> bool {
         self.0.iter().any(|msg| verification::is_contact_only(msg))
+    }
+
+    /// Получить user_id из контакта (если контакт соответствует пользователю)
+    pub(crate) fn contact_user_id(&self) -> Option<String> {
+        self.0
+            .iter()
+            .find_map(|msg| verification::extract_contact_user_id(msg))
     }
 
     pub(crate) fn texts(&self) -> impl Iterator<Item = &str> {
@@ -165,6 +173,7 @@ async fn get_telegram(
         .get(&bot_acc.external_id)
         .copied()
         .unwrap_or(0);
+
     let mirrors = platform
         .platform
         .mirrors
@@ -202,6 +211,7 @@ async fn get_vk(
         .get(&bot_acc.external_id)
         .copied()
         .unwrap_or(0);
+
     let mirrors = platform
         .platform
         .mirrors

@@ -2,7 +2,6 @@ use super::Messenger;
 use crate::client::Client;
 use crate::error::{ChatError, Result};
 use crate::models::{Attachment, Platform, SendMessageRequest, UnifiedMessage};
-
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -117,6 +116,7 @@ struct TgContact {
     phone_number: String,
     first_name: String,
     last_name: Option<String>,
+    user_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -193,15 +193,12 @@ impl Messenger for TelegramMessenger {
     ) -> Result<(Vec<UnifiedMessage>, i64)> {
         let max_attempts = cred.mirrors.len();
         let mut attempts = 0;
-
         loop {
             let url = cred.get_fetch_address(offset);
-
             match self.client.get(&url).await {
                 Ok(response_text) => {
                     let tg_response: TgUpdatesResponse =
                         serde_json::from_str(&response_text).map_err(ChatError::TgResponseParse)?;
-
                     if !tg_response.ok {
                         if let Some(desc) = tg_response.description {
                             tracing::warn!("[TG] API Warning: {}", desc);
@@ -217,10 +214,8 @@ impl Messenger for TelegramMessenger {
                         for update in updates {
                             received_any_update = true;
                             max_update_id = max_update_id.max(update.update_id);
-
                             if let Some(msg) = update.message {
                                 let attachments = parse_attachments(&msg);
-
                                 unified_messages.push(UnifiedMessage {
                                     platform: Platform::Telegram,
                                     user_id: msg.from.id.to_string(),
@@ -239,7 +234,6 @@ impl Messenger for TelegramMessenger {
                     } else {
                         offset
                     };
-
                     return Ok((unified_messages, new_offset));
                 }
                 Err(e) => {
@@ -249,7 +243,6 @@ impl Messenger for TelegramMessenger {
                         cred.get_host(),
                         e
                     );
-
                     if attempts >= max_attempts {
                         tokio::time::sleep(Duration::from_secs(3)).await;
                         return Err(ChatError::Other(format!(
@@ -257,7 +250,6 @@ impl Messenger for TelegramMessenger {
                             e
                         )));
                     }
-
                     cred.next_host();
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 }
@@ -275,7 +267,6 @@ impl Messenger for TelegramMessenger {
             .reply_to_message_id
             .as_ref()
             .and_then(|id| id.parse::<i64>().ok());
-
         let reply_markup_str = request
             .reply_markup
             .as_ref()
@@ -292,15 +283,12 @@ impl Messenger for TelegramMessenger {
 
         let max_attempts = cred.mirrors.len();
         let mut attempts = 0;
-
         loop {
             let url = cred.get_send_address();
-
             match self.client.post_json(&url, &payload).await {
                 Ok(response_text) => {
                     let tg_response: TgSendResponse =
                         serde_json::from_str(&response_text).map_err(ChatError::TgResponseParse)?;
-
                     if !tg_response.ok {
                         return Err(ChatError::tg_response(tg_response.description));
                     } else {
@@ -314,14 +302,12 @@ impl Messenger for TelegramMessenger {
                         cred.get_host(),
                         e
                     );
-
                     if attempts >= max_attempts {
                         return Err(ChatError::Other(format!(
                             "All mirrors failed for sendMessage: {}",
                             e
                         )));
                     }
-
                     cred.next_host();
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 }
@@ -339,6 +325,7 @@ fn parse_attachments(msg: &TgMessage) -> Vec<Attachment> {
             phone: contact.phone_number.clone(),
             first_name: contact.first_name.clone(),
             last_name: contact.last_name.clone(),
+            user_id: contact.user_id.map(|id| id.to_string()),
         });
     }
 

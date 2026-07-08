@@ -5,7 +5,7 @@ use crate::messengers::ChatMessages;
 use crate::poll_based::db_ops::ValidationOutcome;
 
 use chat::models::{ReplyMarkup, TelegramKeyboard};
-use db::core_schema::DbBotAccountWithMeta;
+use db::core_schema::{ApiId, CoreDbCrud, DbBotAccountWithMeta};
 use std::sync::Arc;
 use tokio::task as tt;
 
@@ -51,8 +51,6 @@ async fn run_platform(ctx: Arc<CoreCtx>, meta: DbBotAccountWithMeta) -> Result<(
                 );
                 // Подождать, чтобы СПУ не съедать.
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-                continue 'poll_loop;
-                tracing::error!("Error for {}: {e}", meta.account.external_id);
                 continue;
             }
         };
@@ -73,8 +71,11 @@ async fn process_messages(
 
     let mut data = match outcome {
         ValidationOutcome::Ok(data) => data,
-        ValidationOutcome::NeedPhoneVerification { chat_ext_id, .. } => {
-            return request_phone_verification(&ctx, &meta, &chat_ext_id, &chat_msgs).await;
+        ValidationOutcome::NeedPhoneVerification { chat_ext_id, user_ext_id } => {
+            return request_phone_verification(&ctx, &meta, &chat_ext_id, &user_ext_id, &chat_msgs).await;
+        }
+        ValidationOutcome::InvalidContact { chat_ext_id, user_ext_id } => {
+            return handle_invalid_contact(&ctx, &meta, &chat_ext_id, &user_ext_id, &chat_msgs).await;
         }
     };
 
@@ -89,9 +90,74 @@ async fn request_phone_verification(
     ctx: &CoreCtx,
     meta: &Arc<DbBotAccountWithMeta>,
     chat_ext_id: &str,
+    user_ext_id: &str,
     chat_msgs: &ChatMessages,
 ) -> Result<()> {
     tracing::info!("User from chat {} needs phone verification", chat_ext_id);
+
+    let platform = &meta.platform.platform;
+    
+    // Для VK: генерируем ссылку на OAuth
+    if platform.api_id == ApiId::Vk {
+        let pool = ctx.db().get();
+        let oauth = db::core_schema::DbVkOauth::get_by_platform_id(platform.pkey(), pool).await?;
+        
+        // Генерируем простой уникальный state
+        use std::hash::{Hash, Hasher};
+        use std::collections::hash_map::DefaultHasher;
+        let mut hasher = DefaultHasher::new();
+        std::time::SystemTime::now().hash(&mut hasher);
+        std::thread::current().id().hash(&mut hasher);
+        let state = format!("vk_oauth_{}", hasher.finish());
+        
+        // Сохраняем state в БД
+        let new_state = db::core_schema::DbNewVkOauthState::new(
+            state.clone(), 
+            user_ext_id.to_string(), 
+            platform.pkey()
+        );
+        new_state.insert(pool).await?;
+        
+        // Получаем redirect_uri из конфигурации
+        let redirect_uri = &ctx.cfg().core().vk_redirect_uri;
+        let url = format!(
+            "https://oauth.vk.com/authorize?client_id={}&redirect_uri={}&scope=phone&response_type=code&state={}",
+            oauth.app_id, redirect_uri, state
+        );
+        
+        ctx.chat()
+            .send(
+                meta,
+                chat_ext_id,
+                &format!("Для подтверждения номера телефона перейдите по ссылке: {}", url),
+                chat_msgs.last_msg_external_id(),
+                None,
+            )
+            .await
+    } else {
+        // Для Telegram: используем стандартный запрос контакта
+        let reply_markup = ReplyMarkup::Telegram(TelegramKeyboard::request_contact());
+
+        ctx.chat()
+            .send(
+                meta,
+                chat_ext_id,
+                "Для продолжения работы, пожалуйста, поделитесь своим номером телефона.",
+                chat_msgs.last_msg_external_id(),
+                Some(reply_markup),
+            )
+            .await
+    }
+}
+
+async fn handle_invalid_contact(
+    ctx: &CoreCtx,
+    meta: &Arc<DbBotAccountWithMeta>,
+    chat_ext_id: &str,
+    _user_ext_id: &str,
+    chat_msgs: &ChatMessages,
+) -> Result<()> {
+    tracing::warn!("User sent invalid contact (not their own)");
 
     let reply_markup = ReplyMarkup::Telegram(TelegramKeyboard::request_contact());
 
@@ -99,7 +165,7 @@ async fn request_phone_verification(
         .send(
             meta,
             chat_ext_id,
-            "Для продолжения работы, пожалуйста, поделитесь своим номером телефона.",
+            "Пожалуйста, поделитесь своим собственным номером телефона, а не чужим контактом.",
             chat_msgs.last_msg_external_id(),
             Some(reply_markup),
         )
