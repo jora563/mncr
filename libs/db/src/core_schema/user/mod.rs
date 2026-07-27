@@ -144,7 +144,11 @@ impl DbUserAccount {
     }
 
     /// Обновить идентификатор пользователя для учётной записи.
-    pub async fn update_user_id<'a, E: PgExecutor<'a>>(&self, new_user_id: i64, ex: E) -> Result<()> {
+    pub async fn update_user_id<'a, E: PgExecutor<'a>>(
+        &self,
+        new_user_id: i64,
+        ex: E,
+    ) -> Result<()> {
         sqlx::query("UPDATE user_account SET user_id = $1 WHERE id = $2")
             .bind(new_user_id)
             .bind(self.id)

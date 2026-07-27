@@ -28,12 +28,7 @@ pub struct DbNewVkOauth(DbVkOauth);
 
 impl DbNewVkOauth {
     /// Создать новые данные VK OAuth до вставления в БД.
-    pub fn new(
-        platform_id: i64,
-        app_id: i64,
-        secure_key: Vec<u8>,
-        service_token: Vec<u8>,
-    ) -> Self {
+    pub fn new(platform_id: i64, app_id: i64, secure_key: Vec<u8>, service_token: Vec<u8>) -> Self {
         Self(DbVkOauth {
             id: 0,
             platform_id,

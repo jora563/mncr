@@ -198,12 +198,19 @@ pub(super) async fn insert_next_bot_message(
     const FAKE_MSG_EXT_ID: &str = "";
     let bot = &meta.account;
 
-    DbNewMessage::new_bot(bot, 1, FAKE_MSG_EXT_ID, &mut data.chat, &mut data.ticket, text)?
-        .insert(db.get())
-        .await?
-        .get_files(db.get())
-        .await
-        .map_err(Into::into)
+    DbNewMessage::new_bot(
+        bot,
+        1,
+        FAKE_MSG_EXT_ID,
+        &mut data.chat,
+        &mut data.ticket,
+        text,
+    )?
+    .insert(db.get())
+    .await?
+    .get_files(db.get())
+    .await
+    .map_err(Into::into)
 }
 
 #[tracing::instrument(skip_all)]
@@ -215,10 +222,17 @@ pub(super) async fn insert_next_user_message(
     const FAKE_MSG_EXT_ID: &str = "";
     let user = &data.user_account;
 
-    DbNewMessage::new_user(user, 1, FAKE_MSG_EXT_ID, &mut data.chat, &mut data.ticket, text)?
-        .insert(db.get())
-        .await?
-        .get_files(db.get())
-        .await
-        .map_err(Into::into)
+    DbNewMessage::new_user(
+        user,
+        1,
+        FAKE_MSG_EXT_ID,
+        &mut data.chat,
+        &mut data.ticket,
+        text,
+    )?
+    .insert(db.get())
+    .await?
+    .get_files(db.get())
+    .await
+    .map_err(Into::into)
 }

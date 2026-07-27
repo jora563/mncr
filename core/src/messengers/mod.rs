@@ -35,7 +35,9 @@ impl ChatMessages {
     }
 
     pub(crate) fn phone(&self) -> Option<String> {
-        self.0.iter().find_map(|msg| verification::extract_phone(msg))
+        self.0
+            .iter()
+            .find_map(|msg| verification::extract_phone(msg))
     }
 
     pub(crate) fn user_name(&self) -> String {

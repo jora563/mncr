@@ -4,9 +4,9 @@ use crate::error::{ChatError, Result, VkError};
 use crate::models::{Platform, SendMessageRequest, UnifiedMessage};
 
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// TODO: Decide whether this is a valid format or not.
 /// [vk_group_id]::[vk_access_token]
@@ -183,7 +183,9 @@ impl Messenger for VkMessenger {
             guard.clone()
         };
 
-        let server_info: VkServerInfo = if let Some(info) = current_info && offset != 0 {
+        let server_info: VkServerInfo = if let Some(info) = current_info
+            && offset != 0
+        {
             info
         } else {
             let new_info = self.fetch_server_info(&cred).await?;

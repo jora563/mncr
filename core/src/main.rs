@@ -49,7 +49,7 @@ async fn inner_main(config: Config) -> Result<()> {
     tracing::info!("Client-like polling core created.");
 
     // Этот подход позволяет нам потом добавить ешё и серверной компонент.
-    tokio::select!{
+    tokio::select! {
         poll = poll_fut => check_finish("poller", poll.map_err(Into::into)),
         http = http_fut => check_finish("server", http.map_err(Into::into)),
     }

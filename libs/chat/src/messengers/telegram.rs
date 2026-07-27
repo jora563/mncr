@@ -3,8 +3,8 @@ use crate::client::Client;
 use crate::error::{ChatError, Result};
 use crate::models::{Attachment, Platform, SendMessageRequest, UnifiedMessage};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 #[derive(Clone)]
@@ -238,11 +238,7 @@ impl Messenger for TelegramMessenger {
                 }
                 Err(e) => {
                     attempts += 1;
-                    tracing::error!(
-                        "[TG] Сетевая ошибка на хосте {}: {}",
-                        cred.get_host(),
-                        e
-                    );
+                    tracing::error!("[TG] Сетевая ошибка на хосте {}: {}", cred.get_host(), e);
                     if attempts >= max_attempts {
                         tokio::time::sleep(Duration::from_secs(3)).await;
                         return Err(ChatError::Other(format!(

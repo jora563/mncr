@@ -90,7 +90,7 @@ pub struct LlmConfig {
 
 /// Общая сущность настроек.
 /// ТОДО: Настройки модулей будут подключатся по ходу их исполнения.
-#[derive(Clone,Debug,Default,Deserialize,PartialEq,Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct Config {
     chat: ChatConfig,
     core: CoreSettings,
@@ -99,7 +99,7 @@ pub struct Config {
 }
 
 /// Настройки центрального приложения.
-#[derive(Clone,Debug,Deserialize,PartialEq,Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CoreSettings {
     pub(crate) threads: u16,
     pub(crate) blocking_threads: u16,

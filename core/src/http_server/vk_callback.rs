@@ -1,9 +1,12 @@
-use actix_web::{get, web, HttpResponse, Responder};
+use crate::context::CoreCtx;
+use actix_web::{HttpResponse, Responder, get, web};
+use db::core_schema::{
+    CoreDbCrud, DbNewUser, DbNewUserAccount, DbPlatform, DbUser, DbUserAccount, DbVkOauth,
+    DbVkOauthState,
+};
+use db::error::DbError;
 use serde::Deserialize;
 use std::sync::Arc;
-use crate::context::CoreCtx;
-use db::core_schema::{CoreDbCrud, DbVkOauth, DbVkOauthState, DbUser, DbNewUser, DbUserAccount, DbNewUserAccount, DbPlatform};
-use db::error::DbError;
 
 #[derive(Deserialize)]
 pub struct VkCallbackQuery {
@@ -22,7 +25,9 @@ pub async fn vk_callback(
     // 1. Получаем state из БД
     let state = match DbVkOauthState::get_by_state(&query.state, pool).await {
         Ok(s) => s,
-        Err(DbError::NotFound { .. }) => return HttpResponse::BadRequest().body("Invalid or expired state"),
+        Err(DbError::NotFound { .. }) => {
+            return HttpResponse::BadRequest().body("Invalid or expired state");
+        }
         Err(e) => {
             tracing::error!("DB error getting state: {}", e);
             return HttpResponse::InternalServerError().body("Internal error");
@@ -119,7 +124,9 @@ pub async fn vk_callback(
 
     let phone = match phone_data.response.and_then(|r| r.phone) {
         Some(p) => p,
-        None => return HttpResponse::BadRequest().body("Phone number not provided or error in VK API"),
+        None => {
+            return HttpResponse::BadRequest().body("Phone number not provided or error in VK API");
+        }
     };
 
     // 5. Обновляем или создаём пользователя в БД

@@ -71,11 +71,19 @@ async fn process_messages(
 
     let mut data = match outcome {
         ValidationOutcome::Ok(data) => data,
-        ValidationOutcome::NeedPhoneVerification { chat_ext_id, user_ext_id } => {
-            return request_phone_verification(&ctx, &meta, &chat_ext_id, &user_ext_id, &chat_msgs).await;
+        ValidationOutcome::NeedPhoneVerification {
+            chat_ext_id,
+            user_ext_id,
+        } => {
+            return request_phone_verification(&ctx, &meta, &chat_ext_id, &user_ext_id, &chat_msgs)
+                .await;
         }
-        ValidationOutcome::InvalidContact { chat_ext_id, user_ext_id } => {
-            return handle_invalid_contact(&ctx, &meta, &chat_ext_id, &user_ext_id, &chat_msgs).await;
+        ValidationOutcome::InvalidContact {
+            chat_ext_id,
+            user_ext_id,
+        } => {
+            return handle_invalid_contact(&ctx, &meta, &chat_ext_id, &user_ext_id, &chat_msgs)
+                .await;
         }
     };
 
@@ -96,40 +104,43 @@ async fn request_phone_verification(
     tracing::info!("User from chat {} needs phone verification", chat_ext_id);
 
     let platform = &meta.platform.platform;
-    
+
     // Для VK: генерируем ссылку на OAuth
     if platform.api_id == ApiId::Vk {
         let pool = ctx.db().get();
         let oauth = db::core_schema::DbVkOauth::get_by_platform_id(platform.pkey(), pool).await?;
-        
+
         // Генерируем простой уникальный state
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
         let mut hasher = DefaultHasher::new();
         std::time::SystemTime::now().hash(&mut hasher);
         std::thread::current().id().hash(&mut hasher);
         let state = format!("vk_oauth_{}", hasher.finish());
-        
+
         // Сохраняем state в БД
         let new_state = db::core_schema::DbNewVkOauthState::new(
-            state.clone(), 
-            user_ext_id.to_string(), 
-            platform.pkey()
+            state.clone(),
+            user_ext_id.to_string(),
+            platform.pkey(),
         );
         new_state.insert(pool).await?;
-        
+
         // Получаем redirect_uri из конфигурации
         let redirect_uri = &ctx.cfg().core().vk_redirect_uri;
         let url = format!(
             "https://oauth.vk.com/authorize?client_id={}&redirect_uri={}&scope=phone&response_type=code&state={}",
             oauth.app_id, redirect_uri, state
         );
-        
+
         ctx.chat()
             .send(
                 meta,
                 chat_ext_id,
-                &format!("Для подтверждения номера телефона перейдите по ссылке: {}", url),
+                &format!(
+                    "Для подтверждения номера телефона перейдите по ссылке: {}",
+                    url
+                ),
                 chat_msgs.last_msg_external_id(),
                 None,
             )
