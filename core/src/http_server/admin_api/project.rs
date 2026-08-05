@@ -3,14 +3,15 @@ use crate::context::CoreCtx;
 use crate::error::Result;
 use crate::http_server::to_response::IntoHttpResponse;
 
+use actix_web::http::StatusCode;
 use actix_web::web::{self, Data};
-use actix_web::{Responder, get, post};
+use actix_web::{Responder, get, post, put};
 use db::core_schema::*;
 use serde::Deserialize;
 use std::ops::Deref;
 use std::sync::Arc;
 
-#[get("/projects/{group_id}")]
+#[get("/project_group/{group_id}/projects")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn get_projects(
     group_id: web::Path<i64>,
@@ -22,7 +23,7 @@ pub(super) async fn get_projects(
         .into_response()
 }
 
-#[post("/project/new")]
+#[post("/project")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn post_new_project(
     proj: web::Json<IncomingNewProject>,
@@ -31,10 +32,10 @@ pub(super) async fn post_new_project(
     tracing::info!("Incoming new project: {proj:?}");
     post_new_project_inner(proj.0, data.as_ref())
         .await
-        .into_response()
+        .into_response_with_code(StatusCode::CREATED)
 }
 
-#[post("/project/update")]
+#[put("/project")]
 pub(super) async fn post_update_project(
     proj: web::Json<DbProject>,
     data: Data<Arc<CoreCtx>>,

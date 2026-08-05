@@ -22,6 +22,7 @@ pub struct CoreDbSettings {
     db_host_url: String,
     db_name: String,
     migrations_home: String,
+    fixtures_dir: Option<String>,
     user: String,
     pw: String,
 }
@@ -38,6 +39,7 @@ impl std::fmt::Debug for CoreDbSettings {
             .field("db_host_url", &self.db_host_url)
             .field("db_name", &self.db_name)
             .field("migrations_home", &self.migrations_home)
+            .field("fixtures_dir", &self.fixtures_dir)
             .field("user", &self.user)
             .field("pw", &"[hidden]")
             .finish()
@@ -58,6 +60,7 @@ impl Default for CoreDbSettings {
             db_host_url: "localhost".to_string(),
             db_name: "ai_omni_db".to_string(),
             migrations_home: "sql/core/".to_string(),
+            fixtures_dir: None,
             user: "root".to_string(),
             pw: "password".to_string(),
         }
@@ -119,9 +122,14 @@ impl CoreDbSettings {
         &self.db_host_url
     }
 
-    /// Достать хост БД
+    /// Достать директорию миграций БД
     pub fn migrations_home(&self) -> &str {
         &self.migrations_home
+    }
+
+    /// Достать директорию наполнения БД
+    pub fn fixtures_dir(&self) -> Option<&str> {
+        self.fixtures_dir.as_ref().map(|x| x as &str)
     }
 }
 
@@ -152,6 +160,7 @@ mod tests {
             db_host_url: "localhost".to_string(),
             db_name: "ai_omni_test_db_0".to_string(),
             migrations_home: "../../sql/core/".to_string(),
+            fixtures_dir: None,
             user: "root".to_string(),
             pw: "password".to_string(),
         };

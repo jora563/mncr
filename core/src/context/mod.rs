@@ -25,7 +25,7 @@ pub(crate) struct CoreCtx {
     /// Сущность взаимодействия с LLM
     llm: LlmDriver<llm_client::openai::OpenAiRequest>,
     /// Сущность взаимодействия с очередью
-    queue: (),
+    _queue: (),
 }
 
 impl CoreCtx {
@@ -38,7 +38,7 @@ impl CoreCtx {
             chat: ChatDriver::default(),
             llm: LlmDriver::new(&cfg)?,
             cfg,
-            queue: (),
+            _queue: (),
         })
     }
     pub(crate) fn cfg(&self) -> &Config {

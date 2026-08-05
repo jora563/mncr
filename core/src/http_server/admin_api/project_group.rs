@@ -3,8 +3,9 @@ use crate::context::CoreCtx;
 use crate::error::Result;
 use crate::http_server::to_response::IntoHttpResponse;
 
+use actix_web::http::StatusCode;
 use actix_web::web::{self, Data};
-use actix_web::{Responder, get, post};
+use actix_web::{Responder, get, post, put};
 use db::core_schema::*;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -18,7 +19,7 @@ pub(super) async fn get_project_groups(data: Data<Arc<CoreCtx>>) -> impl Respond
         .into_response()
 }
 
-#[post("/project_group/new")]
+#[post("/project_group")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn post_new_project_group(
     proj_group: web::Json<IncomingNewProjectGroup>,
@@ -27,10 +28,10 @@ pub(super) async fn post_new_project_group(
     tracing::info!("Incoming new project: {proj_group:?}");
     post_new_project_group_inner(proj_group.0, data.as_ref())
         .await
-        .into_response()
+        .into_response_with_code(StatusCode::CREATED)
 }
 
-#[post("/project_group/update")]
+#[put("/project_group")]
 pub(super) async fn post_update_project_group(
     proj_group: web::Json<DbProjectGroup>,
     data: Data<Arc<CoreCtx>>,

@@ -11,7 +11,6 @@ pub mod platform;
 pub mod project;
 pub mod ticket;
 pub mod user;
-pub mod vk_oauth;
 
 pub use bot::{
     DbBot, DbBotAccount, DbBotAccountWithMeta, DbFullBotAccount, DbNewBot, DbNewBotAccount,
@@ -26,7 +25,6 @@ pub use platform::{
 pub use project::{DbFullProjectGroup, DbNewProject, DbNewProjectGroup, DbProject, DbProjectGroup};
 pub use ticket::{DbFullTicket, DbNewTicket, DbTicket};
 pub use user::{DbFullUser, DbNewUser, DbNewUserAccount, DbUser, DbUserAccount};
-pub use vk_oauth::{DbNewVkOauth, DbNewVkOauthState, DbVkOauth, DbVkOauthState};
 
 pub trait CoreDbCrud {
     fn pkey(&self) -> i64;

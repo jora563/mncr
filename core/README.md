@@ -38,3 +38,313 @@ ___
 
 - Чтобы провести юнит тесты БД см. [README для БД библиотеки](../libs/db/README.md)
 - Чтобы попробовать REPL ЛЛМ на llm-client см. [README для ЛЛМ клиент библиотеки](../libs/llm_client/README.md)
+
+
+___
+## HTTP(S)/WS API [⚠️Будет дорабатываться⚠️]
+
+У AIOMNI Core будет несколько API которые могут вызывать посторонние клиенты.
+
+- [HTTP API Администратора](#api-администратора)
+- WS API Оператора
+- HTTP API веб-хуков чатов
+- HTTP API LLM службы
+
+⚠️ НБ: API routes are provisional!
+
+___
+#### GET health
+
+Достать учётную запись бота по его идентификатору.
+
+- Method: GET
+- Route: /health
+- Headers: To be decided.
+- Auth: To be decided.
+- Response: OK 200 "AIOMNI Core is healthy"
+
+___
+### API Администратора
+
+Функционал, в основном, менеджмента проектами и учётными записями ботов. Также будет включать функционал под-грузки данных для LORA адаптеров.
+
+- [GET /v1/admin_api/bot/{n}](#get-bot)
+- [GET /v1/admin_api/project/{n}/bots](#get-project-bots)
+- [GET /v1/admin_api/project_group/{n}/projects](#get-projects)
+- [GET /v1/admin_api/project_groups](#get-project_groups)
+- [POST /v1/admin_api/bot_account](#post-bot_account)
+- [PUT /v1/admin_api/bot_account](#put-bot_account)
+- [POST /v1/admin_api/project](#post-project)
+- [PUT /v1/admin_api/project](#put-project)
+- [POST /v1/admin_api/project_group](#post-project_group)
+- [PUT /v1/admin_api/project_group](#put-project_group)
+
+⚠️ Когда будет доработан функционал доступа, SSO и.т.д. будет
+
+**⚠️ Предварительно:** Аутентификация на методы этого АПИ потребует хедер "Authorization: Bearer {token}", где `{token}` это токен авторизации. Внутренний процесс авторизации зависит от системы конкретного заказчика с которой проходят взаимодействия.
+
+___
+#### GET bot
+
+Достать учётную запись бота по его идентификатору.
+
+- Method: GET
+- Route: /v1/admin_api/bot/{bot_id}
+- Headers: To be decided.
+- Auth: To be decided.
+- URL suffix: {bot_id} заменить идентификатором бота.
+- Response: OK 200
+  ```json
+    {
+        "id": integer,
+        "platform_id": integer,
+        "external_id": String,
+        "expiry_time_hours": Optional<integer>,
+        "token": ByteArray
+    }
+  ```
+
+___
+#### GET project bots
+
+Достать все боты по идентификатору их проекта. Боты приходят с полными метаданными.
+
+- Method: GET
+- Route: /v1/admin_api/project/{project_id}/bots
+- Headers: To be decided.
+- Auth: To be decided.
+- URL suffix: {project_id} заменить идентификатором проекта.
+- Response: OK 200
+  ```json
+    [{
+        "account": {
+            "id": integer,
+            "platform_id": integer,
+            "external_id": String,
+            "expiry_time_hours": Optional<integer>,
+            "token": ByteArray
+        },
+        "platform": {
+            "platform": {
+                "id": integer,
+                "api_id": String,
+                "name": String,
+                "created_on": [Year,Day,Hour,Minute,Second,NanoSecond],
+                "altered_on": Option<[Year,Day,Hour,Minute,Second,NanoSecond]>
+            },
+            "mirrors": [{
+                "platform_id": integer,
+                "url": String,
+                "note": String
+            }]
+        },
+        "project": {
+            "id": integer,
+            "project_group_id": integer,
+            "external_id": String,
+            "project_name": String,
+            "created_on": [Year,Day,Hour,Minute,Second,NanoSecond],
+            "altered_on": Option<[Year,Day,Hour,Minute,Second,NanoSecond]>
+        }
+    }]
+  ```
+
+___
+#### GET projects
+
+Достать все проекты по идентификатору их проектной группы.
+
+- Method: GET
+- Route: /v1/admin_api/project_group/{group_id}/projects
+- Headers: To be decided.
+- Auth: To be decided.
+- URL suffix: {group_id} заменить идентификатором группы.
+- Response: OK 200
+  ```json
+    {
+        "group": {
+            "id": integer,
+            "external_id": String,
+            "group_name": String,
+            "created_on": [Year,Day,Hour,Minute,Second,NanoSecond],
+            "altered_on": Option<[Year,Day,Hour,Minute,Second,NanoSecond]>
+        },
+        "projects": [{
+            "id": integer,
+            "project_group_id": integer,
+            "external_id": String,
+            "project_name": String,
+            "created_on": [Year,Day,Hour,Minute,Second,NanoSecond],
+            "altered_on": Option<[Year,Day,Hour,Minute,Second,NanoSecond]>
+        }]
+    }
+  ```
+
+___
+#### GET project_groups
+
+Достать все проектные группы.
+
+- Method: GET
+- Route: /v1/admin_api/project_groups
+- Headers: To be decided.
+- Auth: To be decided.
+- Response: OK 200
+  ```json
+    [{
+        "id": integer,
+        "external_id": String,
+        "group_name": String,
+        "created_on": [Year,Day,Hour,Minute,Second,NanoSecond],
+        "altered_on": Option<[Year,Day,Hour,Minute,Second,NanoSecond]>
+    }]
+  ```
+
+___
+#### POST bot_account
+
+Добавить новую учётную запись бота.
+
+- Method: POST
+- Route: /v1/admin_api/bot
+- Headers: To be decided.
+- Auth: To be decided.
+- Request:
+  ```json
+    {
+        "platform_id": integer,
+        "external_id": String,
+        "token": ByteArray,
+        "expiry_h": Optional<integer>
+    }
+  ```
+- Response: OK 201
+  ```json
+    {
+        "id": integer,
+        "platform_id": integer,
+        "external_id": String,
+        "expiry_time_hours": Optional<integer>,
+        "token": ByteArray
+    }
+  ```
+
+___
+#### PUT bot_account
+
+Обновить учётную запись бота.
+
+- Method: PUT
+- Route: /v1/admin_api/bot
+- Headers: To be decided.
+- Auth: To be decided.
+- Request:
+  ```json
+    {
+        "id": integer,
+        "platform_id": integer,
+        "external_id": String,
+        "expiry_time_hours": Optional<integer>,
+        "token": ByteArray
+    }
+  ```
+- Response: OK 200
+
+___
+#### POST project
+
+Добавить новый проект.
+
+- Method: POST
+- Route: /v1/admin_api/project
+- Headers: To be decided.
+- Auth: To be decided.
+- Request:
+  ```json
+    {
+        "group_id": integer,
+        "external_id": String,
+        "name": String
+    }
+  ```
+- Response: ОК 201
+  ```json
+    {
+        "id": integer,
+        "project_group_id": integer,
+        "external_id": String,
+        "project_name": String,
+        "created_on": [Year,Day,Hour,Minute,Second,NanoSecond],
+        "altered_on": Option<[Year,Day,Hour,Minute,Second,NanoSecond]>
+    }
+  ```
+
+___
+#### PUT project
+
+Обновить данные проекта.
+
+- Method: PUT
+- Route: /v1/admin_api/project
+- Headers: To be decided.
+- Auth: To be decided.
+- Request:
+  ```json
+    {
+        "id": integer,
+        "project_group_id": integer,
+        "external_id": String,
+        "project_name": String,
+        "created_on": [Year,Day,Hour,Minute,Second,NanoSecond],
+        "altered_on": Option<[Year,Day,Hour,Minute,Second,NanoSecond]>
+    }
+  ```
+- Response: OK 200
+
+___
+#### POST project_group
+
+Добавить новую группу проектов.
+
+- Method: POST
+- Route: /v1/admin_api/project_group
+- Headers: To be decided.
+- Auth: To be decided.
+- Request:
+  ```json
+    {
+        "external_id": String,
+        "name": String
+    }
+  ```
+- Response: OК 201
+  ```json
+    {
+        "id": integer,
+        "external_id": String,
+        "group_name": String,
+        "created_on": [Year,Day,Hour,Minute,Second,NanoSecond],
+        "altered_on": Option<[Year,Day,Hour,Minute,Second,NanoSecond]>
+    }
+  ```
+
+___
+#### PUT project_group
+
+Обновить данные
+
+- Method: PUT
+- Route: /v1/admin_api/project_group
+- Headers: To be decided.
+- Auth: To be decided.
+- Request:
+  ```json
+    {
+        "id": integer,
+        "external_id": String,
+        "group_name": String,
+        "created_on": [Year,Day,Hour,Minute,Second,NanoSecond],
+        "altered_on": Option<[Year,Day,Hour,Minute,Second,NanoSecond]>
+    }
+  ```
+- Response: OK 200

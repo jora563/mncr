@@ -1,0 +1,80 @@
+# Чтобы не зацикливалось не стадии "checking provenance" возможно
+# что надо добавить дополнительные переменные на:
+# `export BUILDX_NO_BUILD_ATTESTATIONS=1`
+# и `export DOCKER_BUILDKIT=0`
+services:
+  aio_core_db:
+    restart: always
+    image: postgres:16.14-bookworm
+    environment:
+      PGUSER: aio_core
+      POSTGRES_USER: aio_core
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: aio_core
+    ports:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aio_core -d aio_core"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+    networks:
+      - db_link
+    volumes:
+      - ./pipeline/fixtures/init-dbs.sh:/docker-entrypoint-initdb.d/init-dbs.sh
+
+
+  llm:
+    image: localai/localai:latest
+    restart: always
+    environment:
+      PRELOAD_MODELS: '[{"url": "https://raw.githubusercontent.com/go-skynet/model-gallery/main/agi-0_art-skynet-3b.yaml","name": "agi-0_art-skynet-3b"}]'
+    ports:
+      - "8080"
+      - "80"
+    post_start:
+      - command: ./local-ai models install agi-0_art-skynet-3b
+      - command: ./local-ai backends install llama-cpp
+    volumes:
+      - ./models:/models:cached
+      - ./backends:/backends:cached
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
+      interval: 20s
+      timeout: 2m
+      retries: 20
+      start_period: 600s
+    networks:
+      - llm_link
+      - outbound
+
+
+  core:
+    build:
+      context: .
+      dockerfile: pipeline/dockerfiles/core_run.Dockerfile
+    ports:
+      - "88"
+      - "5432"
+      - "8080"
+      - "8088"
+    depends_on:
+      aio_core_db:
+        condition: service_healthy
+      llm:
+        condition: service_healthy
+    networks:
+      - db_link
+      - llm_link
+      - outbound
+
+networks:
+    db_link:
+      driver: bridge
+      internal: true
+    llm_link:
+      driver: bridge
+      internal: true
+    outbound:
+      driver: bridge

@@ -106,6 +106,32 @@ impl CoreDbPool {
         Migrator::new(path).await?.undo(self.get(), 0).await?;
         Ok(())
     }
+
+    /// Задействовать фикстуры
+    #[tracing::instrument]
+    pub async fn run_fixtures(&self, fixtures_dir: &str) -> Result<()> {
+        let fixtures = std::fs::read_dir(PathBuf::from(fixtures_dir)).inspect_err(|e| {
+            tracing::error!("Error reading fixtures from '{fixtures_dir:?}': {e}");
+        })?;
+        let mut tx = self.get().begin().await?;
+        for e in fixtures {
+            let e = e.inspect_err(|e| tracing::error!("Error reading fixture: {e}"))?;
+            let path = e.path();
+            // We ignore non-sql files in the fixtures directory.
+            if path.extension() != Some(std::ffi::OsStr::new("sql")) {
+                tracing::debug!("Fixture file '{path:?}' is not an SQL file. Ignoring.");
+                continue;
+            };
+            let fixture = std::fs::read_to_string(&path).inspect_err(|e| {
+                tracing::error!("Error reading fixture file from '{path:?}': {e}");
+            })?;
+            sqlx::raw_sql(sqlx::AssertSqlSafe(fixture))
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

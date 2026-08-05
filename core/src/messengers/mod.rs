@@ -1,71 +1,61 @@
 //! Модуль логики работы с чатами
-
 use ahash::AHashMap;
 use chat::messengers::{Messenger, TelegramMessenger, TgCredentials, VkCredentials, VkMessenger};
-use chat::models::{ReplyMarkup, SendMessageRequest, UnifiedMessage};
-use chat::verification;
+use chat::models::{SendMessageRequest, UnifiedMessage};
 use db::core_schema::{ApiId, CoreDbCrud, DbBotAccountWithMeta, DbChat, DbFullMessage};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::error::{CoreError, Result};
 
+/// Драйвер в которым модуль чата может жить своей лучшей жизнью
 #[derive(Debug, Default)]
 pub(crate) struct ChatDriver {
     tg: Arc<TelegramMessenger>,
-    tg_offsets: Arc<RwLock<AHashMap<String, i64>>>,
+    /// ИД бота (ключ) против оффсета (значение). Оффсет это измерение которым пользуются
+    ///  многие месенджеры чтобы 'понять' с какого сообщения начинать возврощать сообщения.
+    tg_offsets: Arc<RwLock<AHashMap<i64, i64>>>,
     vk: Arc<VkMessenger>,
-    vk_offsets: Arc<RwLock<AHashMap<String, i64>>>,
+    /// ИД бота (ключ) против оффсета (значение). Оффсет это измерение которым пользуются
+    ///  многие месенджеры чтобы 'понять' с какого сообщения начинать возврощать сообщения.
+    vk_offsets: Arc<RwLock<AHashMap<i64, i64>>>,
 }
 
-#[derive(Debug, Clone)]
+/// TODO: Replace with the real thing.
+#[derive(Debug)]
 pub(crate) struct ChatMessages(Vec<UnifiedMessage>);
 
 impl ChatMessages {
-    pub(crate) fn user_external_id(&self) -> &str {
-        self.0.last().map_or("", |v| &v.user_id)
+    pub(crate) fn get_user_external_id(&self) -> &str {
+        self.0.iter().last().map_or("", |v| &v.user_id)
+    }
+    pub(crate) fn get_last_msg_external_id(&self) -> Option<String> {
+        self.0.iter().last().and_then(|v| v.message_id.clone())
+    }
+    pub(crate) fn get_user_nick(&self) -> &str {
+        "Unknown"
+    }
+    pub(crate) fn get_chat_external_id(&self) -> &str {
+        self.0.iter().last().map_or("", |v| &v.chat_id)
+    }
+    pub(crate) fn get_ticket_number(&self) -> Option<i32> {
+        None
+    }
+    /// Если ничего другого нет, то берёмся за телефон.
+    pub(crate) fn get_phone(&self) -> Option<String> {
+        Some("+79452200022".to_string())
     }
 
-    pub(crate) fn last_msg_external_id(&self) -> Option<String> {
-        self.0.last().and_then(|v| v.message_id.clone())
-    }
-
-    pub(crate) fn chat_external_id(&self) -> &str {
-        self.0.last().map_or("", |v| &v.chat_id)
-    }
-
-    pub(crate) fn phone(&self) -> Option<String> {
-        self.0
-            .iter()
-            .find_map(|msg| verification::extract_phone(msg))
-    }
-
-    pub(crate) fn user_name(&self) -> String {
-        self.0
-            .iter()
-            .find_map(|msg| verification::extract_name(msg))
-            .unwrap_or_else(|| "Unknown".to_string())
-    }
-
-    pub(crate) fn is_contact_only(&self) -> bool {
-        self.0.iter().any(|msg| verification::is_contact_only(msg))
-    }
-
-    /// Получить user_id из контакта (если контакт соответствует пользователю)
-    pub(crate) fn contact_user_id(&self) -> Option<String> {
-        self.0
-            .iter()
-            .find_map(|msg| verification::extract_contact_user_id(msg))
-    }
-
-    pub(crate) fn texts(&self) -> impl Iterator<Item = &str> {
+    pub(crate) fn get_text(&self) -> impl Iterator<Item = &str> {
         self.0.iter().map(|x| x.text.as_ref())
     }
 
+    /// Пришла ли нам пустышка.
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    /// Пришла ли нам пустышка.
     pub(crate) fn len(&self) -> usize {
         self.0.len()
     }
@@ -75,18 +65,15 @@ impl ChatDriver {
     #[tracing::instrument(skip_all)]
     pub(crate) async fn initialise(&self, platform: &DbBotAccountWithMeta) -> Result<()> {
         if matches!(platform.platform.platform.api_id, ApiId::Telegram) {
-            let mirrors = platform
-                .platform
-                .mirrors
-                .iter()
-                .map(|m| m.url.clone())
-                .collect();
-            let cred = TgCredentials::from_bytes(&platform.account.token, mirrors)?;
+            let bot_acc = &platform.account;
+            let cred = TgCredentials::from_bytes(&bot_acc.token)?;
             self.tg.ensure_polling_mode(&cred).await?;
         }
         Ok(())
     }
 
+    /// Принимаем сообщение из мессенджеров.
+    /// Внутри сидит логика из библиотеки `chat`.
     #[tracing::instrument(skip_all)]
     pub(crate) async fn get_messages(
         &self,
@@ -95,10 +82,12 @@ impl ChatDriver {
         match platform.platform.platform.api_id {
             ApiId::Telegram => get_telegram(&self.tg, &self.tg_offsets, platform).await,
             ApiId::Vk => get_vk(&self.vk, &self.vk_offsets, platform).await,
-            ApiId::Max => Err(CoreError::ChatApiDisconnected(ApiId::Max)),
+            ApiId::Max => return Err(CoreError::ChatApiDisconnected(ApiId::Max)),
         }
     }
 
+    /// Send messages back to a platform.
+    /// Внутри сидит логика из библиотеки `chat`.
     #[tracing::instrument(skip_all)]
     pub(crate) async fn send_messages(
         &self,
@@ -107,93 +96,62 @@ impl ChatDriver {
         message: DbFullMessage,
         original: ChatMessages,
     ) -> Result<()> {
-        self.send(
-            platform,
-            &chat.external_id,
-            &message.message.content.unwrap_or_default(),
-            original.last_msg_external_id(),
-            None,
-        )
-        .await
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub(crate) async fn send(
-        &self,
-        platform: &DbBotAccountWithMeta,
-        chat_id: &str,
-        text: &str,
-        reply_to: Option<String>,
-        reply_markup: Option<ReplyMarkup>,
-    ) -> Result<()> {
         let request = SendMessageRequest {
-            chat_id: chat_id.to_owned(),
-            text: text.to_owned(),
-            reply_to_message_id: reply_to,
-            reply_markup,
+            chat_id: chat.external_id.to_owned(),
+            text: message.message.content.unwrap_or_default(),
+            reply_to_message_id: original.get_last_msg_external_id(),
         };
-
-        let mirrors = platform
-            .platform
-            .mirrors
-            .iter()
-            .map(|m| m.url.clone())
-            .collect();
-
         match platform.platform.platform.api_id {
-            ApiId::Telegram => {
-                let cred = TgCredentials::from_bytes(&platform.account.token, mirrors)?;
-                self.tg
-                    .send_message(&request, cred)
-                    .await
-                    .map_err(CoreError::ChatLib)
-            }
-            ApiId::Vk => {
-                let cred = VkCredentials::from_bytes(&platform.account.token, mirrors)?;
-                self.vk
-                    .send_message(&request, cred)
-                    .await
-                    .map_err(CoreError::ChatLib)
-            }
-            ApiId::Max => Err(CoreError::ChatApiDisconnected(ApiId::Max)),
-        }
+            ApiId::Telegram => self
+                .tg
+                .send_message(
+                    &request,
+                    TgCredentials::from_bytes(&platform.account.token)?,
+                )
+                .await
+                .map_err(CoreError::ChatLib)?,
+            ApiId::Vk => self
+                .vk
+                .send_message(
+                    &request,
+                    VkCredentials::from_bytes(&platform.account.token)?,
+                )
+                .await
+                .map_err(CoreError::ChatLib)?,
+            ApiId::Max => return Err(CoreError::ChatApiDisconnected(ApiId::Max)),
+        };
+        Ok(())
     }
 }
 
 #[tracing::instrument(skip_all)]
 async fn get_telegram(
     messenger: &TelegramMessenger,
-    offsets: &Arc<RwLock<AHashMap<String, i64>>>,
+    offsets: &Arc<RwLock<AHashMap<i64, i64>>>,
     platform: &DbBotAccountWithMeta,
 ) -> Result<ChatMessages> {
     let bot_acc = &platform.account;
-    tracing::info!("Polling for Telegram messages for {}", bot_acc.external_id);
+    tracing::info!(
+        "Polling for Telegram-Api messages for {}",
+        bot_acc.external_id
+    );
 
     let offset = offsets
         .read()
         .await
-        .get(&bot_acc.external_id)
+        .get(&platform.account.pkey())
         .copied()
         .unwrap_or(0);
-
-    let mirrors = platform
-        .platform
-        .mirrors
-        .iter()
-        .map(|m| m.url.clone())
-        .collect();
-    let cred = TgCredentials::from_bytes(&bot_acc.token, mirrors)?;
+    let cred = TgCredentials::from_bytes(&bot_acc.token)?;
 
     let (messages, new_offset) = messenger
         .fetch_messages(offset, cred)
         .await
         .map_err(CoreError::ChatLib)?;
 
-    *offsets
-        .write()
-        .await
-        .entry(bot_acc.external_id.clone())
-        .or_insert(0) = new_offset;
+    let mut guard = offsets.write().await;
+    let offset = guard.entry(bot_acc.pkey()).or_insert(0);
+    *offset = new_offset;
 
     Ok(ChatMessages(messages))
 }
@@ -201,37 +159,28 @@ async fn get_telegram(
 #[tracing::instrument(skip_all)]
 async fn get_vk(
     messenger: &VkMessenger,
-    offsets: &Arc<RwLock<AHashMap<String, i64>>>,
+    offsets: &Arc<RwLock<AHashMap<i64, i64>>>,
     platform: &DbBotAccountWithMeta,
 ) -> Result<ChatMessages> {
     let bot_acc = &platform.account;
-    tracing::info!("Polling for VK messages for {}", bot_acc.external_id);
+    tracing::info!("Polling for Vk-Api messages for {}", bot_acc.external_id);
 
     let offset = offsets
         .read()
         .await
-        .get(&bot_acc.external_id)
+        .get(&bot_acc.pkey())
         .copied()
         .unwrap_or(0);
-
-    let mirrors = platform
-        .platform
-        .mirrors
-        .iter()
-        .map(|m| m.url.clone())
-        .collect();
-    let cred = VkCredentials::from_bytes(&bot_acc.token, mirrors)?;
+    let cred = VkCredentials::from_bytes(&bot_acc.token)?;
 
     let (messages, new_offset) = messenger
         .fetch_messages(offset, cred)
         .await
         .map_err(CoreError::ChatLib)?;
 
-    *offsets
-        .write()
-        .await
-        .entry(bot_acc.external_id.clone())
-        .or_insert(0) = new_offset;
+    let mut guard = offsets.write().await;
+    let offset = guard.entry(bot_acc.pkey()).or_insert(0);
+    *offset = new_offset;
 
     Ok(ChatMessages(messages))
 }

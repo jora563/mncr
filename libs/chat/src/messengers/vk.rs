@@ -4,9 +4,7 @@ use crate::error::{ChatError, Result, VkError};
 use crate::models::{Platform, SendMessageRequest, UnifiedMessage};
 
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// TODO: Decide whether this is a valid format or not.
 /// [vk_group_id]::[vk_access_token]
@@ -14,20 +12,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub struct VkCredentials {
     group_id: String,
     access_token: String,
-    mirrors: Vec<String>,
-    current_index: Arc<AtomicUsize>,
 }
 
 impl VkCredentials {
     const API_VERSION: &str = "5.199";
-
     /// На базе данных креды содержатся как бинарные данные.
     /// Тут они переписываются как строка.
     #[tracing::instrument(skip_all)]
-    pub fn from_bytes(bytes: &[u8], mirrors: Vec<String>) -> Result<Self> {
-        if mirrors.is_empty() {
-            return Err(ChatError::Other("No mirrors provided for VK".to_string()));
-        }
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let uncut = String::from_utf8(bytes.to_vec()).map_err(|e| e.to_string())?;
         let (a, b) = uncut
             .split_once("::")
@@ -35,34 +27,16 @@ impl VkCredentials {
         Ok(Self {
             group_id: a.to_string(),
             access_token: b.to_string(),
-            mirrors,
-            current_index: Arc::new(AtomicUsize::new(0)),
         })
-    }
-
-    fn get_host(&self) -> &str {
-        let idx = self.current_index.load(Ordering::Relaxed);
-        &self.mirrors[idx % self.mirrors.len()]
-    }
-
-    fn next_host(&self) {
-        let idx = self.current_index.load(Ordering::Relaxed);
-        self.current_index
-            .store((idx + 1) % self.mirrors.len(), Ordering::Relaxed);
     }
 
     fn get_info_address(&self) -> String {
         format!(
-            "https://{}/method/messages.getLongPollServer?group_id={}&access_token={}&v={}&lp_version=3",
-            self.get_host(),
+            "https://api.vk.com/method/messages.getLongPollServer?group_id={}&access_token={}&v={}&lp_version=3",
             self.group_id,
             self.access_token,
             VkCredentials::API_VERSION
         )
-    }
-
-    fn get_send_address(&self) -> String {
-        format!("https://{}/method/messages.send", self.get_host())
     }
 }
 
@@ -102,43 +76,19 @@ impl VkMessenger {
     }
 
     #[tracing::instrument(skip_all)]
-    async fn fetch_server_info(&self, cred: &VkCredentials) -> Result<VkServerInfo> {
-        let max_attempts = cred.mirrors.len();
-        let mut attempts = 0;
+    async fn fetch_server_info(&self, cred: VkCredentials) -> Result<VkServerInfo> {
+        let url = cred.get_info_address();
 
-        loop {
-            let url = cred.get_info_address();
+        let response_text = self.client.get(&url).await.map_err(|e| e.to_string())?;
 
-            match self.client.get(&url).await {
-                Ok(response_text) => {
-                    #[derive(Debug, Deserialize)]
-                    struct VkApiResponse {
-                        response: VkServerInfo,
-                    }
-
-                    let parsed: VkApiResponse = serde_json::from_str(&response_text)?;
-                    return Ok(parsed.response);
-                }
-                Err(e) => {
-                    attempts += 1;
-                    tracing::error!(
-                        "[VK] Сетевая ошибка при получении server_info на хосте {}: {}",
-                        cred.get_host(),
-                        e
-                    );
-
-                    if attempts >= max_attempts {
-                        return Err(ChatError::Other(format!(
-                            "All mirrors failed for getLongPollServer: {}",
-                            e
-                        )));
-                    }
-
-                    cred.next_host();
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                }
-            }
+        #[derive(Debug, Deserialize)]
+        struct VkApiResponse {
+            response: VkServerInfo,
         }
+
+        let parsed: VkApiResponse = serde_json::from_str(&response_text)?;
+
+        Ok(parsed.response)
     }
 
     fn update_ts(&self, new_ts: u64) {
@@ -156,7 +106,7 @@ impl VkMessenger {
 
 #[derive(Debug, Deserialize)]
 struct VkSendResponse {
-    response: Option<serde_json::Value>,
+    response: Option<i64>,
     error: Option<VkError>,
 }
 
@@ -173,7 +123,7 @@ impl Messenger for VkMessenger {
         struct VkPollResponse {
             #[serde(default)]
             ts: Option<u64>,
-            failed: Option<u64>,
+            failed: Option<u8>,
             #[serde(default)]
             updates: Option<Vec<serde_json::Value>>,
         }
@@ -188,7 +138,7 @@ impl Messenger for VkMessenger {
         {
             info
         } else {
-            let new_info = self.fetch_server_info(&cred).await?;
+            let new_info = self.fetch_server_info(cred).await?;
             {
                 let mut guard = self.server_info.lock().unwrap();
                 *guard = Some(new_info.clone());
@@ -270,7 +220,6 @@ impl Messenger for VkMessenger {
                             },
                             timestamp,
                             message_id: Some(message_id.to_string()),
-                            attachments: Vec::new(), // VK: вложения пока не парсим
                         });
                     }
                 }
@@ -286,6 +235,8 @@ impl Messenger for VkMessenger {
         request: &SendMessageRequest,
         cred: Self::Credentials,
     ) -> Result<()> {
+        let url = "https://api.vk.com/method/messages.send";
+
         let peer_id = request
             .chat_id
             .parse::<i64>()
@@ -304,43 +255,20 @@ impl Messenger for VkMessenger {
             random_id,
         };
 
-        let max_attempts = cred.mirrors.len();
-        let mut attempts = 0;
+        let response_text = self
+            .client
+            .post_form(url, &payload)
+            .await
+            .map_err(|e| e.to_string())?;
 
-        loop {
-            let url = cred.get_send_address();
+        let vk_response: VkSendResponse = serde_json::from_str(&response_text)?;
 
-            match self.client.post_form(&url, &payload).await {
-                Ok(response_text) => {
-                    let vk_response: VkSendResponse = serde_json::from_str(&response_text)?;
-
-                    if let Some(error) = vk_response.error {
-                        return Err(ChatError::VkResponse(error));
-                    } else if vk_response.response.is_some() {
-                        return Ok(());
-                    } else {
-                        return Err(ChatError::VkUnexpected(response_text));
-                    }
-                }
-                Err(e) => {
-                    attempts += 1;
-                    tracing::error!(
-                        "[VK] Сетевая ошибка при отправке на хосте {}: {}",
-                        cred.get_host(),
-                        e
-                    );
-
-                    if attempts >= max_attempts {
-                        return Err(ChatError::Other(format!(
-                            "All mirrors failed for messages.send: {}",
-                            e
-                        )));
-                    }
-
-                    cred.next_host();
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                }
-            }
+        if let Some(error) = vk_response.error {
+            Err(ChatError::VkResponse(error))
+        } else if vk_response.response.is_some() {
+            Ok(())
+        } else {
+            Err(ChatError::VkUnexpected(response_text))
         }
     }
 }

@@ -1,21 +1,13 @@
 [core]
 threads = 6
 blocking_threads = 2
-log_level = "info"
+log_level = "trace"
 record_logs = true
 log_dir = "target/tmp"
-server_port = 8081
-server_worker_count = 2
-server_max_blocking_threads = 2
-
-[consul]
-consul_host = "http://user:password@test.ru:8500"
-consul_id = "uzor-aiomni-core-dev"
-consul_tags = ["rust", "api", "ai-omni-core"]
-current_host = "http://test.ru:8081"
 
 [chat]
 apis = ["vk", "telegram"]
+
 
 [db]
 max_connections = 20
@@ -24,9 +16,10 @@ max_no_log_connections = 2
 acquire_timeout_s = 30
 max_lifetime_s = 3600
 idle_timeout_s = 60
-db_host_url = "localhost"
-db_name = "ai_omni_server_test_db_0"
-migrations_home = "sql/core/"
+db_host_url = "aio_core_db"
+db_name = "ai_omni_test_db_1"
+migrations_home = "/src/sql/core"
+fixtures_dir = "/src/pipeline/fixtures/"
 user = "aio_core"
 pw = "password"
 
@@ -36,12 +29,14 @@ model = "\"agi-0_art-skynet-3b\""
 # This model solves the "A и Б сидели на трубе" problem.
 # model = "\"llama-3.1-8b-open-sft\""
 
+
 prompts = [
     "Your role is a call center assistant. You must ALWAYS follow these four rules when answering queries: 1) Answer all incoming request in Russian. 2) Answer all incoming queries politely. 3) Provide the most informative answer that you are capable of. 4) Always provide the confidence interval of your answer.",
+
 ]
 max_tokens = 10_000
 temperature = 0.8
 
 [llm.client]
-host = "http://localhost:8088/"
+host = "http://llm:8080/"
 chat_path = "v1/chat/completions"

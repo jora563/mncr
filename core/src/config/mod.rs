@@ -88,6 +88,15 @@ pub struct LlmConfig {
     client: LlmClientCfg,
 }
 
+/// Настройки Consul.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct ConsulConfig {
+    pub consul_host: String,
+    pub consul_id: String,
+    pub consul_tags: Vec<String>,
+    pub current_host: String,
+}
+
 /// Общая сущность настроек.
 /// ТОДО: Настройки модулей будут подключатся по ходу их исполнения.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -96,6 +105,7 @@ pub struct Config {
     core: CoreSettings,
     db: CoreDbSettings,
     llm: LlmConfig,
+    consul: ConsulConfig,
 }
 
 /// Настройки центрального приложения.
@@ -119,9 +129,6 @@ pub struct CoreSettings {
     /// рабочею нить сервера.
     /// см. <https://docs.rs/actix-web/latest/actix_web/struct.HttpServer.html#method.worker_max_blocking_threads>
     pub(crate) server_max_blocking_threads: u8,
-    /// Redirect URI для VK OAuth callback.
-    /// Должен быть зарегистрирован в настройках VK приложения.
-    pub(crate) vk_redirect_uri: String,
 }
 
 impl Default for CoreSettings {
@@ -135,7 +142,6 @@ impl Default for CoreSettings {
             server_port: 8081,
             server_worker_count: 2,
             server_max_blocking_threads: 2,
-            vk_redirect_uri: "https://localhost:8081/vk/callback".to_string(),
         }
     }
 }
@@ -161,5 +167,8 @@ impl Config {
     #[allow(dead_code)]
     pub(super) fn chat(&self) -> &ChatConfig {
         &self.chat
+    }
+    pub(super) fn consul(&self) -> &ConsulConfig {
+        &self.consul
     }
 }

@@ -6,14 +6,18 @@ use serde::Serialize;
 
 use crate::error::{CoreError, Result};
 
-pub(super) trait IntoHttpResponse {
-    fn into_response(self) -> HttpResponse;
+pub(super) trait IntoHttpResponse: Sized {
+    fn into_response(self) -> HttpResponse {
+        self.into_response_with_code(StatusCode::OK)
+    }
+
+    fn into_response_with_code(self, ok_status: StatusCode) -> HttpResponse;
 }
 
 impl<T: Serialize> IntoHttpResponse for Result<T> {
-    fn into_response(self) -> HttpResponse {
+    fn into_response_with_code(self, ok_status: StatusCode) -> HttpResponse {
         match self {
-            Ok(t) => HttpResponseBuilder::new(StatusCode::OK).json(t),
+            Ok(t) => HttpResponseBuilder::new(ok_status).json(t),
             Err(e) => HttpResponseBuilder::new(e.to_status()).body(e.to_string()),
         }
     }

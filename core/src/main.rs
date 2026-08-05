@@ -4,9 +4,13 @@
 use crate::config::Config;
 use crate::context::CoreCtx;
 use crate::error::Result;
+
 use std::env::{VarError, var};
 use std::sync::Arc;
 use tokio::runtime::Builder;
+
+/// An argument for running fixtures. Useful for CI-CD, but not normally.
+const FIXTURE: &str = "--run-fixtures";
 
 fn main() -> Result<()> {
     let path = var("AI_OMNI_CONFIG_PATH").inspect_err(|e| {
@@ -32,6 +36,9 @@ async fn inner_main(config: Config) -> Result<()> {
     log::initiate_logging(config.core())?;
     tracing::info!("Hello runtime! Our config is: {config:#?}");
 
+    let consul = crate::consul::ConsulClient::new(config.consul().clone());
+    consul.register().await; // Дерегистрация происходит сама по себе после прекращения работы
+
     let ctx = CoreCtx::new(config)
         .await
         .inspect_err(|e| tracing::error!("Failure creating core context: {e}"))?;
@@ -41,6 +48,11 @@ async fn inner_main(config: Config) -> Result<()> {
         .run_up_migrations()
         .await
         .inspect_err(|e| tracing::error!("Migation failure on launch: {e}"))?;
+
+    maybe_run_fixtures(&ctx)
+        .await
+        .inspect_err(|e| tracing::error!("Error in fixtures: {e}"))?;
+
     tracing::info!("Upwards migrations completed.");
 
     let core = Arc::new(ctx);
@@ -49,11 +61,10 @@ async fn inner_main(config: Config) -> Result<()> {
     tracing::info!("Client-like polling core created.");
 
     // Этот подход позволяет нам потом добавить ешё и серверной компонент.
-    tokio::select! {
+    tokio::select!(
         poll = poll_fut => check_finish("poller", poll.map_err(Into::into)),
         http = http_fut => check_finish("server", http.map_err(Into::into)),
-    }
-
+    );
     tracing::info!("Cores joined.");
     tracing::warn!("Shutting down AI Omni Core");
     Ok(())
@@ -90,7 +101,20 @@ fn set_panic_hook<'a, 'b>(meta: &'a tokio::runtime::TaskMeta<'b>) {
     }));
 }
 
+/// Функция для фикстур, в основном для CI-CD.
+async fn maybe_run_fixtures(ctx: &CoreCtx) -> Result<()> {
+    if !std::env::args().any(|x| x == FIXTURE) {
+        return Ok(());
+    };
+    let Some(fix_dir) = ctx.cfg().db().fixtures_dir() else {
+        return Ok(());
+    };
+    ctx.db().run_fixtures(fix_dir).await?;
+    Ok(())
+}
+
 mod config;
+mod consul;
 mod context;
 mod error;
 mod http_server;

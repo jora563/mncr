@@ -3,14 +3,15 @@ use crate::context::CoreCtx;
 use crate::error::Result;
 use crate::http_server::to_response::IntoHttpResponse;
 
+use actix_web::http::StatusCode;
 use actix_web::web::{self, Data};
-use actix_web::{Responder, get, post};
+use actix_web::{Responder, get, post, put};
 use db::core_schema::*;
 use serde::Deserialize;
 use std::ops::Deref;
 use std::sync::Arc;
 
-#[get("/bots/{project_id}")]
+#[get("/project/{project_id}/bots")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn get_bots_for_project(
     project_id: web::Path<i64>,
@@ -31,7 +32,7 @@ pub(super) async fn get_bot(bot_id: web::Path<i64>, data: Data<Arc<CoreCtx>>) ->
         .into_response()
 }
 
-#[post("/bot/new")]
+#[post("/bot")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn post_new_bot_account(
     bot: web::Json<IncomingNewBotAccount>,
@@ -40,10 +41,10 @@ pub(super) async fn post_new_bot_account(
     tracing::info!("Incoming new bot account: {bot:?}");
     post_new_bot_account_inner(bot.0, data.as_ref())
         .await
-        .into_response()
+        .into_response_with_code(StatusCode::CREATED)
 }
 
-#[post("/bot/update")]
+#[put("/bot")]
 pub(super) async fn post_update_bot_account(
     bot: web::Json<DbBotAccount>,
     data: Data<Arc<CoreCtx>>,
