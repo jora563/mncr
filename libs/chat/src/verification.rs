@@ -38,8 +38,8 @@ pub fn extract_contact_user_id(msg: &UnifiedMessage) -> Option<String> {
     })
 }
 
-/// Проверить, содержит ли сообщение только контакт (без осмысленного текста)
-pub fn is_contact_only(msg: &UnifiedMessage) -> bool {
+/// Проверить, содержит ли сообщение контакт (без осмысленного текста)
+pub fn is_contact(msg: &UnifiedMessage) -> bool {
     let has_contact = msg
         .attachments
         .iter()

@@ -52,10 +52,4 @@ impl ChatError {
     pub(crate) fn vk_token(t: &str) -> Self {
         Self::VkToken(t.to_string())
     }
-    pub(crate) fn tg_webhook<E: std::fmt::Display>(e: E) -> Self {
-        Self::TgWebhook(e.to_string())
-    }
-    pub(crate) fn tg_response(e: Option<String>) -> Self {
-        Self::TgWebhook(e.unwrap_or_else(|| "Unknown Error".to_string()))
-    }
 }

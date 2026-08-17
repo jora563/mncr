@@ -7,6 +7,7 @@ members = [
     "libs/llm",
     "libs/llm_client",
     "libs/queue",
+    "libs/uzor_plugin",
 ]
 
 [workspace.package]
@@ -16,9 +17,12 @@ rust-version = "1.95.0"
 [workspace.dependencies]
 actix-web = { version = "4.14" }
 ahash = { version = "*" }
+base64 = { version = "*" }
+futures = { version = "*" }
+josekit = { version = "*" }
 proc-macro2 = { version = "*" }
 quote = { version = "1.0" }
-reqwest = { version = "*", features = ["json", "form"] }
+reqwest = { version = "*", features = ["stream", "json", "form"] }
 sqlx = { version = "*", features = [
     "postgres",
     "runtime-tokio",

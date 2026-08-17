@@ -60,7 +60,7 @@ ___
 - Method: GET
 - Route: /health
 - Headers: To be decided.
-- Auth: To be decided.
+- Auth: None
 - Response: OK 200 "AIOMNI Core is healthy"
 
 ___
@@ -68,8 +68,15 @@ ___
 
 Функционал, в основном, менеджмента проектами и учётными записями ботов. Также будет включать функционал под-грузки данных для LORA адаптеров.
 
+
+- [DELETE /v1/admin_api/bot/{n}](#delete-bot)
+- [DELETE /v1/admin_api/project/{n}](#delete-project)
+- [DELETE /v1/admin_api/project_group/{n}](#delete-project-group)
 - [GET /v1/admin_api/bot/{n}](#get-bot)
+- [GET /v1/admin_api/frontend](#get-frontend)
+- [GET /v1/admin_api/platforms](#get-platforms)
 - [GET /v1/admin_api/project/{n}/bots](#get-project-bots)
+- [GET /v1/admin_api/projects](#get-permitted-projects)
 - [GET /v1/admin_api/project_group/{n}/projects](#get-projects)
 - [GET /v1/admin_api/project_groups](#get-project_groups)
 - [POST /v1/admin_api/bot_account](#post-bot_account)
@@ -84,6 +91,42 @@ ___
 **⚠️ Предварительно:** Аутентификация на методы этого АПИ потребует хедер "Authorization: Bearer {token}", где `{token}` это токен авторизации. Внутренний процесс авторизации зависит от системы конкретного заказчика с которой проходят взаимодействия.
 
 ___
+### DELETE bot
+
+Удалить бот по его идентификатору.
+
+- Method: DELETE
+- Route: /v1/admin_api/bot/{bot_id}
+- Headers: To be decided.
+- Auth: BEARER
+- URL suffix: {bot_id} заменить идентификатором бота.
+- Response: OK 200
+
+___
+### DELETE project
+
+Удалить проект по его идентификатору
+
+- Method: DELETE
+- Route: /v1/admin_api/project/{project_id}
+- Headers: To be decided.
+- Auth: BEARER
+- URL suffix: {project_id} заменить идентификатором проекта.
+- Response: OK 200
+
+___
+### DELETE project group
+
+Удалить проект по его идентификатору
+
+- Method: DELETE
+- Route: /v1/admin_api/project_group/{group_id}
+- Headers: To be decided.
+- Auth: BEARER
+- URL suffix: {group_id} заменить идентификатором группы.
+- Response: OK 200
+
+___
 #### GET bot
 
 Достать учётную запись бота по его идентификатору.
@@ -91,7 +134,7 @@ ___
 - Method: GET
 - Route: /v1/admin_api/bot/{bot_id}
 - Headers: To be decided.
-- Auth: To be decided.
+- Auth: BEARER
 - URL suffix: {bot_id} заменить идентификатором бота.
 - Response: OK 200
   ```json
@@ -105,6 +148,47 @@ ___
   ```
 
 ___
+#### GET frontend
+
+Достать все платформы. Работает как справочник.
+
+- Method: GET
+- Route: /v1/admin_api/frontend
+- Headers: To be decided.
+- Auth: BEARER
+- URL suffix: -
+- Response: OK 200 + a byte-stream of UTF-8 encoded frontend files.
+
+
+___
+#### GET platforms
+
+Достать все платформы. Работает как справочник.
+
+- Method: GET
+- Route: /v1/admin_api/platforms
+- Headers: To be decided.
+- Auth: BEARER
+- URL suffix: -
+- Response: OK 200
+  ```json
+    [{
+        "platform": {
+            "id": integer,
+            "api_id": integer,
+            "name": String,
+            "created_on": [Year,Day,Hour,Minute,Second,NanoSecond],
+            "altered_on": Option<[Year,Day,Hour,Minute,Second,NanoSecond]>
+        },
+        "mirrors": {
+            "platform_id": integer,
+            "url": String,
+            "note": String
+        }
+    }]
+  ```
+
+___
 #### GET project bots
 
 Достать все боты по идентификатору их проекта. Боты приходят с полными метаданными.
@@ -112,7 +196,7 @@ ___
 - Method: GET
 - Route: /v1/admin_api/project/{project_id}/bots
 - Headers: To be decided.
-- Auth: To be decided.
+- Auth: BEARER
 - URL suffix: {project_id} заменить идентификатором проекта.
 - Response: OK 200
   ```json
@@ -150,6 +234,29 @@ ___
   ```
 
 ___
+#### GET permitted projects
+
+Достать все проекты которые дозволены пользователю.
+
+- Method: GET
+- Route: /v1/admin_api/projects
+- Headers: To be decided.
+- Auth: BEARER
+- URL suffix: -
+- Response: OK 200
+  ```json
+    [{
+        "id": integer,
+        "project_group_id": integer,
+        "external_id": String,
+        "project_name": String,
+        "created_on": [Year,Day,Hour,Minute,Second,NanoSecond],
+        "altered_on": Option<[Year,Day,Hour,Minute,Second,NanoSecond]>
+    }]
+  ```
+
+
+___
 #### GET projects
 
 Достать все проекты по идентификатору их проектной группы.
@@ -157,7 +264,7 @@ ___
 - Method: GET
 - Route: /v1/admin_api/project_group/{group_id}/projects
 - Headers: To be decided.
-- Auth: To be decided.
+- Auth: BEARER
 - URL suffix: {group_id} заменить идентификатором группы.
 - Response: OK 200
   ```json
@@ -188,7 +295,7 @@ ___
 - Method: GET
 - Route: /v1/admin_api/project_groups
 - Headers: To be decided.
-- Auth: To be decided.
+- Auth: BEARER
 - Response: OK 200
   ```json
     [{
@@ -208,7 +315,7 @@ ___
 - Method: POST
 - Route: /v1/admin_api/bot
 - Headers: To be decided.
-- Auth: To be decided.
+- Auth: BEARER
 - Request:
   ```json
     {
@@ -237,7 +344,7 @@ ___
 - Method: PUT
 - Route: /v1/admin_api/bot
 - Headers: To be decided.
-- Auth: To be decided.
+- Auth: BEARER
 - Request:
   ```json
     {
@@ -258,7 +365,7 @@ ___
 - Method: POST
 - Route: /v1/admin_api/project
 - Headers: To be decided.
-- Auth: To be decided.
+- Auth: BEARER
 - Request:
   ```json
     {
@@ -287,7 +394,7 @@ ___
 - Method: PUT
 - Route: /v1/admin_api/project
 - Headers: To be decided.
-- Auth: To be decided.
+- Auth: BEARER
 - Request:
   ```json
     {
@@ -309,7 +416,7 @@ ___
 - Method: POST
 - Route: /v1/admin_api/project_group
 - Headers: To be decided.
-- Auth: To be decided.
+- Auth: BEARER
 - Request:
   ```json
     {
@@ -336,7 +443,7 @@ ___
 - Method: PUT
 - Route: /v1/admin_api/project_group
 - Headers: To be decided.
-- Auth: To be decided.
+- Auth: BEARER
 - Request:
   ```json
     {

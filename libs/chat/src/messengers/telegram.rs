@@ -1,41 +1,38 @@
 use super::Messenger;
-use crate::client::Client;
 use crate::error::{ChatError, Result};
-use crate::models::{Platform, SendMessageRequest, UnifiedMessage};
-
+use crate::models::{Attachment, Platform, SendMessageRequest, UnifiedMessage};
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
-/// Креды для ВК
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TgCredentials {
-    bot_token: String,
+    pub bot_token: String,
 }
 
 impl TgCredentials {
     /// На базе данных креды содержатся как бинарные данные.
     /// Тут они переписываются как строка.
-    #[tracing::instrument(skip_all)]
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        let bot_token = String::from_utf8(bytes.to_vec()).map_err(|e| e.to_string())?;
+        let bot_token = String::from_utf8(bytes.to_vec())
+            .map_err(|e| ChatError::Other(format!("Invalid UTF-8 in token: {}", e)))?;
         Ok(Self { bot_token })
     }
-    fn get_fetch_address(&self, offset: i64) -> String {
-        format!(
-            "https://api.telegram.org/bot{}/getUpdates?offset={}&timeout=25",
-            self.bot_token, offset
-        )
-    }
-    fn get_info_address(&self) -> String {
-        format!(
-            "https://api.telegram.org/bot{}/deleteWebhook?drop_pending_updates=true",
-            self.bot_token
-        )
-    }
-    fn get_send_address(&self) -> String {
-        format!("https://api.telegram.org/bot{}/sendMessage", self.bot_token)
-    }
 }
+
+/// Список зеркал (хостов) для API Telegram, получаемый из БД.
+#[derive(Clone, Debug)]
+pub struct TgMirrors {
+    pub urls: Vec<String>,
+}
+
+/// Контекст сессии, объединяющий учетные данные и маршрутизацию.
+/// Используется как `Credentials` в реализации трейта `Messenger`.
+#[derive(Clone, Debug)]
+pub struct TgSession {
+    pub cred: TgCredentials,
+    pub mirrors: TgMirrors,
+}
+
+// --- Структуры для десериализации ответов Telegram API ---
 
 #[derive(Debug, Deserialize)]
 struct TgUpdatesResponse {
@@ -66,15 +63,40 @@ struct TgMessage {
     chat: TgChat,
     date: u64,
     text: Option<String>,
+    contact: Option<TgContact>,
+    photo: Option<Vec<TgPhotoSize>>,
+    document: Option<TgDocument>,
 }
 
 #[derive(Debug, Deserialize)]
 struct TgUser {
     id: i64,
 }
+
 #[derive(Debug, Deserialize)]
 struct TgChat {
     id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct TgContact {
+    phone_number: String,
+    first_name: String,
+    last_name: Option<String>,
+    user_id: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TgPhotoSize {
+    file_id: String,
+    file_size: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TgDocument {
+    file_id: String,
+    file_size: Option<i64>,
+    file_name: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -83,126 +105,216 @@ struct TgSendRequest<'a> {
     text: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     reply_to_message_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reply_markup: Option<String>,
 }
+
+// --- Основная реализация ---
 
 #[derive(Clone, Debug, Default)]
 pub struct TelegramMessenger {
-    client: Client,
+    client: reqwest::Client,
 }
 
 impl TelegramMessenger {
     pub fn new() -> Self {
         Self {
-            client: Client::new(),
+            client: reqwest::Client::new(),
         }
     }
 
-    #[tracing::instrument(skip_all)]
-    pub async fn ensure_polling_mode(&self, cred: &TgCredentials) -> Result<()> {
-        let url = cred.get_info_address();
-        match self.client.get(&url).await {
-            Ok(_) => {
-                tracing::info!("[TG] Вебхук удален, режим Long Polling активирован.");
-                Ok(())
+    /// Активирует режим Long Polling, перебирая зеркала до первого успешного ответа.
+    pub async fn ensure_polling_mode(&self, session: &TgSession) -> Result<()> {
+        for host in &session.mirrors.urls {
+            let url = format!(
+                "https://{}/bot{}/deleteWebhook?drop_pending_updates=true",
+                host, session.cred.bot_token
+            );
+            if self.client.get(&url).send().await.is_ok() {
+                tracing::info!(
+                    "[TG] Вебхук удален на хосте {}, режим Long Polling активирован.",
+                    host
+                );
+                return Ok(());
             }
-            Err(e) => Err(ChatError::tg_webhook(e)),
         }
+        Err(ChatError::Other(
+            "Не удалось удалить вебхук ни на одном из зеркал".to_string(),
+        ))
     }
 }
 
 impl Messenger for TelegramMessenger {
-    type Credentials = TgCredentials;
+    type Credentials = TgSession;
 
-    #[tracing::instrument(skip_all)]
     async fn fetch_messages(
         &self,
         offset: i64,
         cred: Self::Credentials,
     ) -> Result<(Vec<UnifiedMessage>, i64)> {
-        let url = cred.get_fetch_address(offset);
+        let mut last_error = None;
 
-        let response_text = match self.client.get(&url).await {
-            Ok(text) => text,
-            Err(e) => {
-                tracing::error!("[TG] Сетевая ошибка: {}", e);
-                tokio::time::sleep(Duration::from_secs(3)).await;
-                return Ok((Vec::new(), offset));
-            }
-        };
+        for host in &cred.mirrors.urls {
+            let url = format!(
+                "https://{}/bot{}/getUpdates?offset={}&timeout=25",
+                host, cred.cred.bot_token, offset
+            );
 
-        let tg_response: TgUpdatesResponse =
-            serde_json::from_str(&response_text).map_err(ChatError::TgResponseParse)?;
+            match self.client.get(&url).send().await {
+                Ok(resp) => {
+                    if let Ok(text) = resp.text().await {
+                        if let Ok(tg_response) = serde_json::from_str::<TgUpdatesResponse>(&text) {
+                            if !tg_response.ok {
+                                if let Some(desc) = &tg_response.description {
+                                    tracing::warn!("[TG] API Warning on {}: {}", host, desc);
+                                }
+                                // Ошибка API (напр. неверный токен), нет смысла пробовать другие зеркала
+                                return Ok((Vec::new(), offset));
+                            }
 
-        if !tg_response.ok {
-            if let Some(desc) = tg_response.description {
-                tracing::warn!("[TG] API Warning: {}", desc);
-            }
-            return Ok((Vec::new(), offset));
-        }
+                            let mut unified_messages = Vec::new();
+                            let mut max_update_id = offset;
+                            let mut received_any = false;
 
-        let mut unified_messages = Vec::new();
-        let mut max_update_id = offset;
-        let mut received_any_update = false;
+                            if let Some(updates) = tg_response.result {
+                                for update in updates {
+                                    received_any = true;
+                                    max_update_id = max_update_id.max(update.update_id);
+                                    if let Some(msg) = update.message {
+                                        let attachments = parse_attachments(&msg);
+                                        let text =
+                                            msg.text.as_deref().unwrap_or("[Медиа]").to_string();
 
-        if let Some(updates) = tg_response.result {
-            for update in updates {
-                received_any_update = true;
-                if update.update_id >= max_update_id {
-                    max_update_id = update.update_id;
+                                        unified_messages.push(UnifiedMessage {
+                                            platform: Platform::Telegram,
+                                            user_id: msg.from.id.to_string(),
+                                            chat_id: msg.chat.id.to_string(),
+                                            text,
+                                            timestamp: msg.date,
+                                            message_id: Some(msg.message_id.to_string()),
+                                            attachments,
+                                        });
+                                    }
+                                }
+                            }
+                            return Ok((
+                                unified_messages,
+                                if received_any {
+                                    max_update_id + 1
+                                } else {
+                                    offset
+                                },
+                            ));
+                        } else {
+                            last_error = Some(format!("JSON parse error on {}", host));
+                        }
+                    } else {
+                        last_error = Some(format!("Read error on {}", host));
+                    }
                 }
-
-                if let Some(msg) = update.message {
-                    unified_messages.push(UnifiedMessage {
-                        platform: Platform::Telegram,
-                        user_id: msg.from.id.to_string(),
-                        chat_id: msg.chat.id.to_string(),
-                        text: msg.text.unwrap_or_else(|| "[Медиа]".to_string()),
-                        timestamp: msg.date,
-                        message_id: Some(msg.message_id.to_string()),
-                    });
+                Err(e) => {
+                    last_error = Some(format!("Network error on {}: {}", host, e));
                 }
             }
         }
 
-        if received_any_update {
-            Ok((unified_messages, max_update_id + 1))
-        } else {
-            Ok((unified_messages, offset))
-        }
+        Err(ChatError::Other(format!(
+            "Все зеркала недоступны. Последняя ошибка: {}",
+            last_error.unwrap_or_else(|| "Список зеркал пуст".to_string())
+        )))
     }
 
-    #[tracing::instrument(skip_all)]
     async fn send_message(
         &self,
         request: &SendMessageRequest,
         cred: Self::Credentials,
     ) -> Result<()> {
-        let url = cred.get_send_address();
+        let mut last_error = None;
 
-        let reply_id = request
-            .reply_to_message_id
-            .as_ref()
-            .and_then(|id| id.parse::<i64>().ok());
+        for host in &cred.mirrors.urls {
+            let url = format!("https://{}/bot{}/sendMessage", host, cred.cred.bot_token);
 
-        let payload = TgSendRequest {
-            chat_id: &request.chat_id,
-            text: &request.text,
-            reply_to_message_id: reply_id,
-        };
+            let reply_id = request
+                .reply_to_message_id
+                .as_ref()
+                .and_then(|id| id.parse::<i64>().ok());
+            let reply_markup_str = request
+                .reply_markup
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()
+                .map_err(|e| ChatError::Other(format!("Serialize markup: {}", e)))?;
 
-        let response_text = self
-            .client
-            .post_json(&url, &payload)
-            .await
-            .map_err(|e| e.to_string())?;
+            let payload = TgSendRequest {
+                chat_id: &request.chat_id,
+                text: &request.text,
+                reply_to_message_id: reply_id,
+                reply_markup: reply_markup_str,
+            };
 
-        let tg_response: TgSendResponse =
-            serde_json::from_str(&response_text).map_err(ChatError::TgResponseParse)?;
-
-        if !tg_response.ok {
-            Err(ChatError::tg_response(tg_response.description))
-        } else {
-            Ok(())
+            match self.client.post(&url).json(&payload).send().await {
+                Ok(resp) => {
+                    if let Ok(text) = resp.text().await {
+                        if let Ok(tg_response) = serde_json::from_str::<TgSendResponse>(&text) {
+                            if !tg_response.ok {
+                                return Err(ChatError::Other(
+                                    tg_response
+                                        .description
+                                        .unwrap_or_else(|| "Unknown API error".to_string()),
+                                ));
+                            }
+                            return Ok(());
+                        } else {
+                            last_error = Some(format!("JSON parse error on {}", host));
+                        }
+                    } else {
+                        last_error = Some(format!("Read error on {}", host));
+                    }
+                }
+                Err(e) => {
+                    last_error = Some(format!("Network error on {}: {}", host, e));
+                }
+            }
         }
+
+        Err(ChatError::Other(format!(
+            "Все зеркала недоступны. Последняя ошибка: {}",
+            last_error.unwrap_or_else(|| "Список зеркал пуст".to_string())
+        )))
     }
+}
+
+/// Парсит вложения из сообщения Telegram
+fn parse_attachments(msg: &TgMessage) -> Vec<Attachment> {
+    let mut attachments = Vec::new();
+
+    if let Some(contact) = &msg.contact {
+        attachments.push(Attachment::Contact {
+            phone: contact.phone_number.clone(),
+            first_name: contact.first_name.clone(),
+            last_name: contact.last_name.clone(),
+            user_id: contact.user_id.map(|id| id.to_string()),
+        });
+    }
+
+    if let Some(photos) = &msg.photo
+        && let Some(largest) = photos.last()
+    {
+        attachments.push(Attachment::Photo {
+            file_id: largest.file_id.clone(),
+            file_url: None,
+            file_size: largest.file_size,
+        });
+    }
+
+    if let Some(doc) = &msg.document {
+        attachments.push(Attachment::Document {
+            file_id: doc.file_id.clone(),
+            file_url: None,
+            file_size: doc.file_size,
+            file_name: doc.file_name.clone(),
+        });
+    }
+
+    attachments
 }

@@ -7,5 +7,5 @@ idle_timeout_s = 60
 db_host_url = "localhost"
 db_name = "ai_omni_test_db_0"
 migrations_home = "../../sql/core/"
-user = "root"
+user = "aio_core"
 pw = "password"

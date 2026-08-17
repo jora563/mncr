@@ -11,9 +11,7 @@
 //! Как видно, в большинстве случаев связи много-к-многим связанны именно с проектами.
 use sqlx::PgExecutor;
 
-use crate::core_schema::{
-    DbBotAccount, DbChat, DbPlatform, DbProject, DbTicket, DbUser, DbUserAccount,
-};
+use crate::core_schema::{DbChat, DbPlatform, DbProject, DbTicket, DbUser, DbUserAccount};
 use crate::error::Result;
 
 /// Условная связь между платформой и проектом
@@ -27,10 +25,6 @@ pub struct DbProjectUser;
 /// Условная связь между проектом и учётной записью пользователя
 #[derive(Clone, Debug)]
 pub struct DbUserAccountProject;
-
-/// Условная связь между проектом и учётной записью пользователя
-#[derive(Clone, Debug)]
-pub struct DbBotAccountProject;
 
 ///Условная связь между темой/тикетом и чатом
 #[derive(Clone, Debug)]
@@ -64,40 +58,6 @@ impl DbTicketChat {
                 ORDER BY started_on ASC",
         )
         .bind(ticket_id)
-        .fetch_all(ex)
-        .await
-        .map_err(Into::into)
-    }
-}
-
-impl DbBotAccountProject {
-    /// Достать все проекты связаны с данной платформой.
-    pub async fn get_for_account<E>(account_id: i64, ex: E) -> Result<Vec<DbProject>>
-    where
-        E: for<'a> PgExecutor<'a>,
-    {
-        sqlx::query_as::<_, DbProject>(
-            "SELECT * FROM project
-                WHERE id = ANY(SELECT project_id FROM bot_account_project WHERE account_id = $1)
-                ORDER BY created_on ASC",
-        )
-        .bind(account_id)
-        .fetch_all(ex)
-        .await
-        .map_err(Into::into)
-    }
-
-    /// Достать все платформы связаны с данным проектом
-    pub async fn get_for_project<E>(project_id: i64, ex: E) -> Result<Vec<DbBotAccount>>
-    where
-        E: for<'a> PgExecutor<'a>,
-    {
-        sqlx::query_as::<_, DbBotAccount>(
-            "SELECT * FROM bot_account
-                WHERE id = ANY(SELECT account_id FROM bot_account_project WHERE project_id = $1)
-                ORDER BY id ASC",
-        )
-        .bind(project_id)
         .fetch_all(ex)
         .await
         .map_err(Into::into)

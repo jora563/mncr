@@ -25,14 +25,7 @@ async fn test_validate_chat() {
                     .await
                     .unwrap();
 
-                let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
-                let bot_account =
-                    DbNewBotAccount::new(&platform, "RB-890123",None  , b"password".to_vec());
-
-                let user_account = user_account.insert(&pool).await.unwrap();
-                let bot_account = bot_account.insert(&pool).await.unwrap();
-
-                let project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+                let project_group = DbNewProjectGroup::new("Telecorp")
                     .insert(&pool)
                     .await
                     .unwrap();
@@ -42,6 +35,13 @@ async fn test_validate_chat() {
                     .await
                     .unwrap();
 
+                let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
+                let bot_account =
+                    DbNewBotAccount::new(&platform, None, "RB-890123",None  , b"password".to_vec());
+
+                let user_account = user_account.insert(&pool).await.unwrap();
+                let mut bot_account = bot_account.insert(&pool).await.unwrap();
+
                 let project2 =
                     DbNewProject::new(&project_group, "AKUWDHWA-8692", "The Biggest Spam")
                         .insert(&pool)
@@ -49,9 +49,6 @@ async fn test_validate_chat() {
                         .unwrap();
 
                 moma::DbUserAccountProject::link(&user_account, &project, &pool)
-                    .await
-                    .unwrap();
-                moma::DbBotAccountProject::link(&bot_account, &project2, &pool)
                     .await
                     .unwrap();
 
@@ -86,9 +83,8 @@ async fn test_validate_chat() {
                     "User account (PWRR-001) and chat platform incompatible (1 vs 2)."
                 );
 
-                moma::DbBotAccountProject::link(&bot_account, &project, &pool)
-                    .await
-                    .unwrap();
+                bot_account.project_id = Some(project.pkey());
+                bot_account.update(&pool).await.unwrap();
 
                 // Валидация чат проект/чат платформа
                 let chat_err4 =
@@ -136,14 +132,7 @@ async fn test_chat_crud() {
                 .await
                 .unwrap();
 
-            let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
-            let bot_account =
-                DbNewBotAccount::new(&platform, "RB-890123", None, b"password".to_vec());
-
-            let user_account = user_account.insert(&pool).await.unwrap();
-            let bot_account = bot_account.insert(&pool).await.unwrap();
-
-            let project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+            let project_group = DbNewProjectGroup::new("Telecorp")
                 .insert(&pool)
                 .await
                 .unwrap();
@@ -153,10 +142,19 @@ async fn test_chat_crud() {
                 .await
                 .unwrap();
 
+            let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
+            let bot_account = DbNewBotAccount::new(
+                &platform,
+                Some(&project),
+                "RB-890123",
+                None,
+                b"password".to_vec(),
+            );
+
+            let user_account = user_account.insert(&pool).await.unwrap();
+            let bot_account = bot_account.insert(&pool).await.unwrap();
+
             moma::DbUserAccountProject::link(&user_account, &project, &pool)
-                .await
-                .unwrap();
-            moma::DbBotAccountProject::link(&bot_account, &project, &pool)
                 .await
                 .unwrap();
 
@@ -218,14 +216,7 @@ async fn test_full_chat() {
                 .await
                 .unwrap();
 
-            let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
-            let bot_account =
-                DbNewBotAccount::new(&platform, "RB-890123", None, b"password".to_vec());
-
-            let user_account = user_account.insert(&pool).await.unwrap();
-            let bot_account = bot_account.insert(&pool).await.unwrap();
-
-            let project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+            let project_group = DbNewProjectGroup::new("Telecorp")
                 .insert(&pool)
                 .await
                 .unwrap();
@@ -235,10 +226,19 @@ async fn test_full_chat() {
                 .await
                 .unwrap();
 
+            let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
+            let bot_account = DbNewBotAccount::new(
+                &platform,
+                Some(&project),
+                "RB-890123",
+                None,
+                b"password".to_vec(),
+            );
+
+            let user_account = user_account.insert(&pool).await.unwrap();
+            let bot_account = bot_account.insert(&pool).await.unwrap();
+
             moma::DbUserAccountProject::link(&user_account, &project, &pool)
-                .await
-                .unwrap();
-            moma::DbBotAccountProject::link(&bot_account, &project, &pool)
                 .await
                 .unwrap();
 
@@ -403,24 +403,7 @@ async fn test_message_validate() {
                     .await
                     .unwrap();
 
-                let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
-                let user_account2 = DbNewUserAccount::new(&user, &platform, "PWRR-002", "Red2");
-                let user_account3 = DbNewUserAccount::new(&user, &platform2, "PWRR-003", "Red3");
-                let bot_account =
-                    DbNewBotAccount::new(&platform, "RB-890123",None , b"password".to_vec());
-                let bot_account2 =
-                    DbNewBotAccount::new(&platform, "RB-890124",None , b"password".to_vec());
-                let bot_account3 =
-                    DbNewBotAccount::new(&platform2, "RB-890125",None , b"password".to_vec());
-
-                let user_account = user_account.insert(&pool).await.unwrap();
-                let user_account2 = user_account2.insert(&pool).await.unwrap();
-                let user_account3 = user_account3.insert(&pool).await.unwrap();
-                let bot_account = bot_account.insert(&pool).await.unwrap();
-                let bot_account2 = bot_account2.insert(&pool).await.unwrap();
-                let bot_account3 = bot_account3.insert(&pool).await.unwrap();
-
-                let project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+                let project_group = DbNewProjectGroup::new("Telecorp")
                     .insert(&pool)
                     .await
                     .unwrap();
@@ -429,6 +412,23 @@ async fn test_message_validate() {
                     .insert(&pool)
                     .await
                     .unwrap();
+
+                let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
+                let user_account2 = DbNewUserAccount::new(&user, &platform, "PWRR-002", "Red2");
+                let user_account3 = DbNewUserAccount::new(&user, &platform2, "PWRR-003", "Red3");
+                let bot_account =
+                    DbNewBotAccount::new(&platform, Some(&project), "RB-890123",None , b"password".to_vec());
+                let bot_account2 =
+                    DbNewBotAccount::new(&platform, None, "RB-890124",None , b"password".to_vec());
+                let bot_account3 =
+                    DbNewBotAccount::new(&platform2, None, "RB-890125",None , b"password".to_vec());
+
+                let user_account = user_account.insert(&pool).await.unwrap();
+                let user_account2 = user_account2.insert(&pool).await.unwrap();
+                let user_account3 = user_account3.insert(&pool).await.unwrap();
+                let mut bot_account = bot_account.insert(&pool).await.unwrap();
+                let bot_account2 = bot_account2.insert(&pool).await.unwrap();
+                let bot_account3 = bot_account3.insert(&pool).await.unwrap();
 
                 let project2 = DbNewProject::new(&project_group, "AKUWDHWA-8691", "The Big Spam")
                     .insert(&pool)
@@ -453,9 +453,6 @@ async fn test_message_validate() {
 
 
                 moma::DbUserAccountProject::link(&user_account, &project, &pool)
-                    .await
-                    .unwrap();
-                moma::DbBotAccountProject::link(&bot_account, &project, &pool)
                     .await
                     .unwrap();
 
@@ -549,9 +546,8 @@ async fn test_message_validate() {
                 moma::DbUserAccountProject::un_link(&user_account, &project, &pool)
                     .await
                     .unwrap();
-                moma::DbBotAccountProject::un_link(&bot_account, &project, &pool)
-                    .await
-                    .unwrap();
+                bot_account.project_id = None;
+                bot_account.update(&pool).await.unwrap();
 
                 let err5 = DbNewMessage::new_user(
                     &user_account,
@@ -604,20 +600,20 @@ async fn test_message_crud() {
                 let platform = DbNewPlatform::new(ApiId::Vk, "Rangergram").insert(&pool).await.unwrap();
                 let user = DbNewUser::new("+79451234567", "The Red Ranger").insert(&pool).await.unwrap();
 
-                let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
-                let bot_account =
-                    DbNewBotAccount::new(&platform, "RB-890123",None , b"password".to_vec());
-
-                let user_account = user_account.insert(&pool).await.unwrap();
-                let bot_account = bot_account.insert(&pool).await.unwrap();
-
-                let project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+                let project_group = DbNewProjectGroup::new("Telecorp")
                     .insert(&pool)
                     .await
                     .unwrap();
 
                 let project = DbNewProject::new(&project_group, "AKUWDHWA-8691", "The Big Spam").insert(&pool).await.unwrap();
 
+
+                let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
+                let bot_account =
+                    DbNewBotAccount::new(&platform, Some(&project), "RB-890123",None , b"password".to_vec());
+
+                let user_account = user_account.insert(&pool).await.unwrap();
+                let bot_account = bot_account.insert(&pool).await.unwrap();
                 moma::DbProjectUser::link(&project, &user, &pool).await.unwrap();
                 let started = time::macros::datetime!(2024-01-01 00:02);
                 let topic = "Сломалась сенокосилка и унитаз";
@@ -625,7 +621,6 @@ async fn test_message_crud() {
                 let mut ticket = ticket.insert(&pool).await.unwrap();
 
                 moma::DbUserAccountProject::link(&user_account, &project, &pool).await.unwrap();
-                moma::DbBotAccountProject::link(&bot_account, &project, &pool).await.unwrap();
 
                 let started = time::macros::datetime!(2024-01-01 00:02);
                 let chat_id = "XYZ-1000";
@@ -699,20 +694,19 @@ async fn test_full_message_single_and_many() {
                 let platform = DbNewPlatform::new(ApiId::Vk, "Rangergram").insert(&pool).await.unwrap();
                 let user = DbNewUser::new("+79451234567", "The Red Ranger").insert(&pool).await.unwrap();
 
-                let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
-                let bot_account =
-                    DbNewBotAccount::new(&platform, "RB-890123",None , b"password".to_vec());
-
-                let user_account = user_account.insert(&pool).await.unwrap();
-                let bot_account = bot_account.insert(&pool).await.unwrap();
-
-                let project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+                let project_group = DbNewProjectGroup::new("Telecorp")
                     .insert(&pool)
                     .await
                     .unwrap();
-
                 let project = DbNewProject::new(&project_group, "AKUWDHWA-8691", "The Big Spam").insert(&pool).await.unwrap();
 
+
+                let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
+                let bot_account =
+                    DbNewBotAccount::new(&platform, Some(&project), "RB-890123",None , b"password".to_vec());
+
+                let user_account = user_account.insert(&pool).await.unwrap();
+                let bot_account = bot_account.insert(&pool).await.unwrap();
                 moma::DbProjectUser::link(&project, &user, &pool).await.unwrap();
                 let started = time::macros::datetime!(2024-01-01 00:02);
                 let topic = "Сломалась сенокосилка и унитаз";
@@ -720,7 +714,6 @@ async fn test_full_message_single_and_many() {
                 let mut ticket = ticket.insert(&pool).await.unwrap();
 
                 moma::DbUserAccountProject::link(&user_account, &project, &pool).await.unwrap();
-                moma::DbBotAccountProject::link(&bot_account, &project, &pool).await.unwrap();
 
                 let started = time::macros::datetime!(2024-01-01 00:02);
                 let chat_id = "XYZ-1000";

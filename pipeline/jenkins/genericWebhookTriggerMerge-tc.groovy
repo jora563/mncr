@@ -127,7 +127,7 @@ pipeline {
         BBREPO = 'aiomni-core'
         BBADDR = "${BBHOST}/scm/${BBPROJ}/${BBREPO}.git"
         DOCKER_REPO_URL = 'tc-dockerhub.telecontact.ru/'
-        DOCKER_IMAGE = 'tc-dockerhub.telecontact.ru/ai-omni/core_standalone:v0.2'
+        DOCKER_IMAGE = 'tc-dockerhub.telecontact.ru/ai-omni/core_standalone:v0.4'
         JENKINS = 'jenkins_username_password'
         DOCKER_REPO_CREDENTIALS_ID = 'tc-dockerhub.telecontact.ru_buildmaker'
         HTTP = 'https'
@@ -380,9 +380,11 @@ pipeline {
                     echo "`ai-omni-core` pipeline failed. Cannot merge."
                     // We notify the PR that it has failed, and link to the build.
                     String e = sh(script: "cat ${FINAL_ERROR_FILE}", returnStdout: true).trim()
-                    e = e.replaceAll('\n', '\\\\n')
+                    e = e.replaceAll('\n', '::::::n')
+                    e = e.replaceAll("\\\\", '')
                     e = e.replaceAll("'", "")
                     e = e.replaceAll('"', '')
+                    e = e.replaceAll('::::::n', '\\\\n')
                     withCredentials([usernamePassword(
                         credentialsId: JENKINS,
                         usernameVariable: 'UN',

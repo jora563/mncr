@@ -8,6 +8,8 @@ use db::core_schema::ApiId;
 use llm_client::config::{LlmClientCfg, LlmRequestCfg};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use uzor_plugin::config::GetUzorPluginConfig;
+use uzor_plugin::config::UzorPluginConfig;
 
 /// Уровень логгирования
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -105,6 +107,7 @@ pub struct Config {
     core: CoreSettings,
     db: CoreDbSettings,
     llm: LlmConfig,
+    auth: UzorPluginConfig,
     consul: ConsulConfig,
 }
 
@@ -129,6 +132,11 @@ pub struct CoreSettings {
     /// рабочею нить сервера.
     /// см. <https://docs.rs/actix-web/latest/actix_web/struct.HttpServer.html#method.worker_max_blocking_threads>
     pub(crate) server_max_blocking_threads: u8,
+    /// Redirect URI для VK OAuth callback.
+    /// Должен быть зарегистрирован в настройках VK приложения.
+    pub(crate) vk_redirect_uri: String,
+    /// Ссылка на файлы Фронтэнда.
+    pub(crate) fe_dir: String,
 }
 
 impl Default for CoreSettings {
@@ -142,7 +150,15 @@ impl Default for CoreSettings {
             server_port: 8081,
             server_worker_count: 2,
             server_max_blocking_threads: 2,
+            vk_redirect_uri: "https://localhost:8081/vk/callback".to_string(),
+            fe_dir: ".test-settings/test-fe".to_string(),
         }
+    }
+}
+
+impl GetUzorPluginConfig for Config {
+    fn get_config(&self) -> &UzorPluginConfig {
+        &self.auth
     }
 }
 
@@ -151,18 +167,9 @@ impl Config {
         let file = std::fs::read_to_string(path)?;
         toml::from_str(&file).map_err(Into::into)
     }
-
-    pub(super) fn db(&self) -> &CoreDbSettings {
-        &self.db
-    }
-    pub(super) fn core(&self) -> &CoreSettings {
-        &self.core
-    }
-    pub(super) fn llm_req(&self) -> &LlmRequestCfg {
-        &self.llm.request
-    }
-    pub(super) fn llm_client(&self) -> &LlmClientCfg {
-        &self.llm.client
+    #[allow(dead_code)]
+    pub(super) fn auth(&self) -> &UzorPluginConfig {
+        &self.auth
     }
     #[allow(dead_code)]
     pub(super) fn chat(&self) -> &ChatConfig {
@@ -170,5 +177,24 @@ impl Config {
     }
     pub(super) fn consul(&self) -> &ConsulConfig {
         &self.consul
+    }
+    pub(super) fn core(&self) -> &CoreSettings {
+        &self.core
+    }
+    pub(super) fn db(&self) -> &CoreDbSettings {
+        &self.db
+    }
+    pub(super) fn llm_client(&self) -> &LlmClientCfg {
+        &self.llm.client
+    }
+    pub(super) fn llm_req(&self) -> &LlmRequestCfg {
+        &self.llm.request
+    }
+}
+
+#[cfg(test)]
+impl Config {
+    pub(super) fn auth_mut(&mut self) -> &mut UzorPluginConfig {
+        &mut self.auth
     }
 }

@@ -76,70 +76,6 @@ async fn test_ticket_chat() {
 }
 
 #[tokio::test]
-async fn test_bot_account_project() {
-    run_test_postgres::<TestCfg, _>(MIG, FIX, CLEAN, |pool| async move {
-        let s = full_setup(&pool).await;
-
-        let project = DbBotAccountProject::get_for_account(s.bots[0].pkey(), &pool)
-            .await
-            .unwrap();
-        let account =
-            DbBotAccountProject::get_for_project(s.project_group.projects[0].pkey(), &pool)
-                .await
-                .unwrap();
-        assert!(account.is_empty());
-        assert!(project.is_empty());
-
-        DbBotAccountProject::link(&s.bots[0], &s.project_group.projects[0], &pool)
-            .await
-            .unwrap();
-        DbBotAccountProject::link(&s.bots[1], &s.project_group.projects[1], &pool)
-            .await
-            .unwrap();
-        DbBotAccountProject::link(&s.bots[1], &s.project_group.projects[2], &pool)
-            .await
-            .unwrap();
-        DbBotAccountProject::link(&s.bots[2], &s.project_group.projects[3], &pool)
-            .await
-            .unwrap();
-
-        let project = DbBotAccountProject::get_for_account(s.bots[0].pkey(), &pool)
-            .await
-            .unwrap();
-        let account =
-            DbBotAccountProject::get_for_project(s.project_group.projects[0].pkey(), &pool)
-                .await
-                .unwrap();
-
-        let exists = DbBotAccountProject::exists(&s.bots[0], &s.project_group.projects[0], &pool)
-            .await
-            .unwrap();
-
-        assert!(exists);
-        assert_eq!(account.len(), 1);
-        assert_eq!(project.len(), 1);
-        assert_eq!(account[0], s.bots[0]);
-        assert_eq!(project[0], s.project_group.projects[0]);
-
-        DbBotAccountProject::un_link(&s.bots[0], &s.project_group.projects[0], &pool)
-            .await
-            .unwrap();
-
-        let project = DbBotAccountProject::get_for_account(s.bots[0].pkey(), &pool)
-            .await
-            .unwrap();
-        let account =
-            DbBotAccountProject::get_for_project(s.project_group.projects[0].pkey(), &pool)
-                .await
-                .unwrap();
-        assert!(account.is_empty());
-        assert!(project.is_empty());
-        Ok(())
-    })
-    .await
-}
-
-#[tokio::test]
 async fn test_user_account_project() {
     run_test_postgres::<TestCfg, _>(MIG, FIX, CLEAN, |pool| async move {
         let s = full_setup(&pool).await;
@@ -382,6 +318,13 @@ async fn setup_chats_annex(s: &mut Setup, pool: &PgPool) {
 
     let started = time::macros::datetime!(2024-01-01 00:02);
     let chat_id = "XYZ-1000";
+
+    moma::DbUserAccountProject::link(&s.user_accounts[0], project1, pool)
+        .await
+        .unwrap();
+
+    s.bots[0].project_id = Some(project1.pkey());
+    s.bots[0].update(pool).await.unwrap();
     let chat1 = DbNewChat::new(
         chat_id,
         &s.user_accounts[0],
@@ -390,14 +333,15 @@ async fn setup_chats_annex(s: &mut Setup, pool: &PgPool) {
         platform1,
         started,
     );
-    moma::DbUserAccountProject::link(&s.user_accounts[0], project1, pool)
-        .await
-        .unwrap();
-    moma::DbBotAccountProject::link(&s.bots[0], project1, pool)
+    let chat1 = chat1.insert(pool).await.unwrap();
+
+    let chat_id = "XYZ-1001";
+    moma::DbUserAccountProject::link(&s.user_accounts[2], project1, pool)
         .await
         .unwrap();
 
-    let chat_id = "XYZ-1001";
+    s.bots[2].project_id = Some(project1.pkey());
+    s.bots[2].update(pool).await.unwrap();
     let chat2 = DbNewChat::new(
         chat_id,
         &s.user_accounts[2],
@@ -406,11 +350,16 @@ async fn setup_chats_annex(s: &mut Setup, pool: &PgPool) {
         platform1,
         started,
     );
-    moma::DbUserAccountProject::link(&s.user_accounts[2], project1, pool)
+
+    let chat2 = chat2.insert(pool).await.unwrap();
+
+    let chat_id = "XYZ-1002";
+    moma::DbUserAccountProject::link(&s.user_accounts[3], project2, pool)
         .await
         .unwrap();
 
-    let chat_id = "XYZ-1002";
+    s.bots[2].project_id = Some(project2.pkey());
+    s.bots[2].update(pool).await.unwrap();
     let chat3 = DbNewChat::new(
         chat_id,
         &s.user_accounts[3],
@@ -419,14 +368,19 @@ async fn setup_chats_annex(s: &mut Setup, pool: &PgPool) {
         platform2,
         started,
     );
-    moma::DbUserAccountProject::link(&s.user_accounts[3], project2, pool)
-        .await
-        .unwrap();
-    moma::DbBotAccountProject::link(&s.bots[2], project2, pool)
+    let chat3 = chat3.insert(pool).await.unwrap();
+
+    let chat_id = "XYZ-1003";
+    moma::DbUserAccountProject::link(&s.user_accounts[6], project2, pool)
         .await
         .unwrap();
 
-    let chat_id = "XYZ-1003";
+    s.bots[4].project_id = Some(project2.pkey());
+    s.bots[4].update(pool).await.unwrap();
+
+    moma::DbUserAccountProject::link(&s.user_accounts[9], project3, pool)
+        .await
+        .unwrap();
     let chat4 = DbNewChat::new(
         chat_id,
         &s.user_accounts[6],
@@ -435,12 +389,10 @@ async fn setup_chats_annex(s: &mut Setup, pool: &PgPool) {
         platform3,
         started,
     );
-    moma::DbUserAccountProject::link(&s.user_accounts[6], project2, pool)
-        .await
-        .unwrap();
-    moma::DbBotAccountProject::link(&s.bots[4], project2, pool)
-        .await
-        .unwrap();
+    let chat4 = chat4.insert(pool).await.unwrap();
+
+    s.bots[1].project_id = Some(project3.pkey());
+    s.bots[1].update(pool).await.unwrap();
 
     let chat_id = "XYZ-1004";
     let chat5 = DbNewChat::new(
@@ -451,14 +403,12 @@ async fn setup_chats_annex(s: &mut Setup, pool: &PgPool) {
         platform1,
         started,
     );
-    moma::DbUserAccountProject::link(&s.user_accounts[9], project3, pool)
-        .await
-        .unwrap();
-    moma::DbBotAccountProject::link(&s.bots[1], project3, pool)
-        .await
-        .unwrap();
+    let chat5 = chat5.insert(pool).await.unwrap();
 
     let chat_id = "XYZ-1005";
+
+    s.bots[1].project_id = Some(project4.pkey());
+    s.bots[1].update(pool).await.unwrap();
     let chat6 = DbNewChat::new(
         chat_id,
         &s.user_accounts[9],
@@ -470,22 +420,13 @@ async fn setup_chats_annex(s: &mut Setup, pool: &PgPool) {
     moma::DbUserAccountProject::link(&s.user_accounts[9], project4, pool)
         .await
         .unwrap();
-    moma::DbBotAccountProject::link(&s.bots[1], project4, pool)
-        .await
-        .unwrap();
-
-    let chat1 = chat1.insert(pool).await.unwrap();
-    let chat2 = chat2.insert(pool).await.unwrap();
-    let chat3 = chat3.insert(pool).await.unwrap();
-    let chat4 = chat4.insert(pool).await.unwrap();
-    let chat5 = chat5.insert(pool).await.unwrap();
     let chat6 = chat6.insert(pool).await.unwrap();
     s.chats = vec![chat1, chat2, chat3, chat4, chat5, chat6];
 }
 
 /// Единое создание схемы для тестирования
 async fn full_setup(pool: &PgPool) -> Setup {
-    let project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+    let project_group = DbNewProjectGroup::new("Telecorp")
         .insert(pool)
         .await
         .unwrap();
@@ -570,15 +511,24 @@ async fn full_setup(pool: &PgPool) -> Setup {
     let user4_account1 = user4_account1.insert(pool).await.unwrap();
     let user5_account1 = user5_account1.insert(pool).await.unwrap();
 
-    let bot_account1 = DbNewBotAccount::new(&platform1, "RB1-001", None, b"password".to_vec());
-    let bot_account2 = DbNewBotAccount::new(&platform1, "RB1-002", None, b"password".to_vec());
-    let bot_account3 = DbNewBotAccount::new(&platform2, "RB2-001", None, b"password".to_vec());
-    let bot_account4 = DbNewBotAccount::new(&platform2, "RB2-002", None, b"password".to_vec());
-    let bot_account5 = DbNewBotAccount::new(&platform3, "RB3-001", None, b"password".to_vec());
-    let bot_account6 = DbNewBotAccount::new(&platform3, "RB3-002", None, b"password".to_vec());
-    let bot_account7 = DbNewBotAccount::new(&platform4, "RB4-001", None, b"password".to_vec());
-    let bot_account8 = DbNewBotAccount::new(&platform4, "RB4-002", None, b"password".to_vec());
-    let bot_account9 = DbNewBotAccount::new(&platform5, "RB5-001", None, b"password".to_vec());
+    let bot_account1 =
+        DbNewBotAccount::new(&platform1, None, "RB1-001", None, b"password".to_vec());
+    let bot_account2 =
+        DbNewBotAccount::new(&platform1, None, "RB1-002", None, b"password".to_vec());
+    let bot_account3 =
+        DbNewBotAccount::new(&platform2, None, "RB2-001", None, b"password".to_vec());
+    let bot_account4 =
+        DbNewBotAccount::new(&platform2, None, "RB2-002", None, b"password".to_vec());
+    let bot_account5 =
+        DbNewBotAccount::new(&platform3, None, "RB3-001", None, b"password".to_vec());
+    let bot_account6 =
+        DbNewBotAccount::new(&platform3, None, "RB3-002", None, b"password".to_vec());
+    let bot_account7 =
+        DbNewBotAccount::new(&platform4, None, "RB4-001", None, b"password".to_vec());
+    let bot_account8 =
+        DbNewBotAccount::new(&platform4, None, "RB4-002", None, b"password".to_vec());
+    let bot_account9 =
+        DbNewBotAccount::new(&platform5, None, "RB5-001", None, b"password".to_vec());
 
     let bot_account1 = bot_account1.insert(pool).await.unwrap();
     let bot_account2 = bot_account2.insert(pool).await.unwrap();

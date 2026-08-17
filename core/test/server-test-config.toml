@@ -7,6 +7,8 @@ log_dir = "target/tmp"
 server_port = 8081
 server_worker_count = 2
 server_max_blocking_threads = 2
+vk_redirect_uri = "https://localhost:8081/vk/callback"
+fe_dir = "../.test-settings/fe_dir"
 
 [consul]
 consul_host = "http://user:password@test.ru:8500"
@@ -45,3 +47,25 @@ temperature = 0.8
 [llm.client]
 host = "http://localhost:8088/"
 chat_path = "v1/chat/completions"
+
+[auth]
+# asaa_home = "https://tc-asaa.telecontact.ru"
+asaa_home = "http://localhost:9998"
+
+# [auth.keycloak]
+# use_server_based_check = true
+# home = "http://localhost:9091"
+# client_id = "some_client_id"
+# client_secret = "some_client_secret_at_least_512_bytes_long"
+# public_key = "some_public_key"
+# endpoint = "some_endpoint"
+# realm = "some_realm"
+
+[auth.keycloak]
+use_server_based_check = true
+home = "http://localhost:9998"
+client_id = "some_client_id"
+client_secret = "35cTMk4PgNgcmK9LOsbFWcqy76qtUkKy"
+public_key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4oRys5sBvxxsw83i36IO9oHQ01Y/BscmDPEnYFbExph3LqqZaqDBzvniQsCn7lp9MTteL9BOzENZlPuHEeBeLmFrQUy2wRpOERXmy3uDZ5wHBE8Zg6qqrcCFdg6h74loRgR2hSs+8pp+TPOdXWfzRybeXbaFjm3XNI0eLCqSmdcta9kfgNeH650hgSC5bMuG6m/CIY425YpafJkIsnGBOSltT4I4mSEm9d6R7OgovS+ZXMjVpHflySQCTCg4EDOmD+Y9blNe3g+naUX8YK4zFjw63hS8ch+6qypvUF3HN6ToLVBg7xFi9uel+/NthIBIrEcKaLQ2szFJreKcdJzJfwIDAQAB"
+endpoint = "some_endpoint"
+realm = "some_realm"

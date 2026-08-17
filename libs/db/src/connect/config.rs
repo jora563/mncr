@@ -161,7 +161,7 @@ mod tests {
             db_name: "ai_omni_test_db_0".to_string(),
             migrations_home: "../../sql/core/".to_string(),
             fixtures_dir: None,
-            user: "root".to_string(),
+            user: "aio_core".to_string(),
             pw: "password".to_string(),
         };
         assert_eq!(cfg, exp);
@@ -171,7 +171,7 @@ mod tests {
     fn test_connection_string() {
         let cfg = get_test_cfg();
         let conn_str = cfg.connections_string();
-        let exp = "postgresql://root:password@localhost/ai_omni_test_db_0";
+        let exp = "postgresql://aio_core:password@localhost/ai_omni_test_db_0";
         assert_eq!(conn_str, exp);
     }
 

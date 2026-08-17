@@ -25,7 +25,7 @@ impl<T: Serialize> IntoHttpResponse for Result<T> {
 
 impl CoreError {
     /// TODO: This. Properly.
-    fn to_status(&self) -> StatusCode {
+    pub(crate) fn to_status(&self) -> StatusCode {
         use CoreError::*;
         use actix_web::ResponseError;
 
@@ -46,6 +46,7 @@ impl CoreError {
             Http(h) => h.status_code(),
             Parse(_) => StatusCode::INTERNAL_SERVER_ERROR,
             QueueError => StatusCode::INTERNAL_SERVER_ERROR,
+            NoAccess(_, _) | UzorPlugin(_) => StatusCode::FORBIDDEN,
         }
     }
 }

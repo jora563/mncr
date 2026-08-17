@@ -14,6 +14,8 @@ pub struct DbVkOauth {
     id: i64,
     /// Идентификатор платформы к которой принадлежат данные.
     pub platform_id: i64,
+    /// Идентификатор проекта.
+    pub project_id: i64,
     /// Идентификатор standalone приложения VK.
     pub app_id: i64,
     /// Секретный ключ приложения.
@@ -28,10 +30,17 @@ pub struct DbNewVkOauth(DbVkOauth);
 
 impl DbNewVkOauth {
     /// Создать новые данные VK OAuth до вставления в БД.
-    pub fn new(platform_id: i64, app_id: i64, secure_key: Vec<u8>, service_token: Vec<u8>) -> Self {
+    pub fn new(
+        platform_id: i64,
+        project_id: i64,
+        app_id: i64,
+        secure_key: Vec<u8>,
+        service_token: Vec<u8>,
+    ) -> Self {
         Self(DbVkOauth {
             id: 0,
             platform_id,
+            project_id,
             app_id,
             secure_key,
             service_token,
@@ -47,14 +56,16 @@ impl DbNewVkOauth {
 }
 
 impl DbVkOauth {
-    pub(super) fn from_tuple(row: (i64, i64, i64, Vec<u8>, Vec<u8>)) -> Self {
-        Self {
-            id: row.0,
-            platform_id: row.1,
-            app_id: row.2,
-            secure_key: row.3,
-            service_token: row.4,
-        }
+    /// Достать OAuth данные по идентификатору проекта.
+    pub async fn get_by_project_id<E>(id: i64, ex: E) -> Result<Self>
+    where
+        E: for<'a> PgExecutor<'a>,
+    {
+        let res = Self::get_by_field("project_id", id, ex)
+            .await?
+            .pop()
+            .ok_or_else(|| DbError::not_found("DbVkOauth", "project_id", id))?;
+        Ok(res)
     }
 
     /// Достать OAuth данные по идентификатору платформы.
@@ -74,7 +85,7 @@ impl DbVkOauth {
     where
         E: for<'a> PgExecutor<'a>,
     {
-        sqlx::query_as::<_, Self>("SELECT * FROM vk_oauth ORDER BY platform_id ASC")
+        sqlx::query_as::<_, Self>("SELECT * FROM vk_oauth ORDER BY project_id ASC")
             .fetch_all(ex)
             .await
             .map_err(Into::into)
@@ -93,6 +104,8 @@ pub struct DbVkOauthState {
     pub user_ext_id: String,
     /// Идентификатор платформы.
     pub platform_id: i64,
+    /// Идентификатор проекта.
+    pub project_id: i64,
     /// Время создания.
     pub created_at: time::OffsetDateTime,
 }
@@ -103,12 +116,13 @@ pub struct DbNewVkOauthState(DbVkOauthState);
 
 impl DbNewVkOauthState {
     /// Создать новое состояние.
-    pub fn new(state: String, user_ext_id: String, platform_id: i64) -> Self {
+    pub fn new(state: String, user_ext_id: String, platform_id: i64, project_id: i64) -> Self {
         Self(DbVkOauthState {
             id: 0,
             state,
             user_ext_id,
             platform_id,
+            project_id,
             created_at: time::UtcDateTime::now().into(),
         })
     }
@@ -140,3 +154,6 @@ impl DbVkOauthState {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -52,10 +52,6 @@ INSERT INTO public.user_account_project (account_id,project_id) VALUES
 	 (2,1),
 	 (3,2)
 	 ON CONFLICT(account_id,project_id) DO NOTHING;
-INSERT INTO public.bot_account_project (account_id,project_id) VALUES
-	 (1,2),
-	 (2,2)
-	 ON CONFLICT(account_id,project_id) DO NOTHING;
 INSERT INTO public.project_platform (project_id,platform_id) VALUES
 	 (1,1),
 	 (2,1),

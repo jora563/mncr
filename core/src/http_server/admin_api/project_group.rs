@@ -1,15 +1,19 @@
 //! Внутренний функционал сервера
 use crate::context::CoreCtx;
-use crate::error::Result;
+use crate::error::{CoreError, Result};
+use crate::http_server::permitted_projects;
 use crate::http_server::to_response::IntoHttpResponse;
 
+use actix_web::HttpRequest;
 use actix_web::http::StatusCode;
 use actix_web::web::{self, Data};
-use actix_web::{Responder, get, post, put};
+use actix_web::{Responder, delete, get, post, put};
 use db::core_schema::*;
 use serde::Deserialize;
 use std::sync::Arc;
+use uzor_plugin::{AsaaData, PermissionReExtract};
 
+/// Достанем все проекты на которые администратор имеет разрешение.
 #[get("/project_groups")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn get_project_groups(data: Data<Arc<CoreCtx>>) -> impl Responder {
@@ -17,6 +21,18 @@ pub(super) async fn get_project_groups(data: Data<Arc<CoreCtx>>) -> impl Respond
     get_project_groups_inner(data.as_ref())
         .await
         .into_response()
+}
+
+#[delete("/project_group/{id}")]
+#[tracing::instrument(skip(data))]
+pub(super) async fn delete_project_group(
+    id: web::Path<i64>,
+    data: Data<Arc<CoreCtx>>,
+) -> impl Responder {
+    tracing::info!("Incoming request to delete project group: {id:?}");
+    delete_project_group_inner(*id, data.as_ref())
+        .await
+        .into_response_with_code(StatusCode::OK)
 }
 
 #[post("/project_group")]
@@ -33,18 +49,21 @@ pub(super) async fn post_new_project_group(
 
 #[put("/project_group")]
 pub(super) async fn post_update_project_group(
+    req: HttpRequest,
     proj_group: web::Json<DbProjectGroup>,
     data: Data<Arc<CoreCtx>>,
 ) -> impl Responder {
     tracing::info!("Incoming project group for update: {proj_group:?}");
-    post_update_project_group_inner(proj_group.0, data.as_ref())
+
+    post_update_project_group_inner(req, proj_group.0, data.as_ref())
         .await
         .into_response()
 }
 /// Достать все группы проектов в БД.
 async fn get_project_groups_inner(ctx: &Arc<CoreCtx>) -> Result<Vec<DbProjectGroup>> {
-    let pool = ctx.db().get();
-    DbProjectGroup::get_all(pool).await.map_err(Into::into)
+    DbProjectGroup::get_all(ctx.db().get())
+        .await
+        .map_err(Into::into)
 }
 
 /// Добавить новую группу проектов в БД.
@@ -57,11 +76,32 @@ async fn post_new_project_group_inner(
 }
 
 /// Обновит группу проектов в БД.
+async fn delete_project_group_inner(id: i64, ctx: &Arc<CoreCtx>) -> Result<()> {
+    let pool = ctx.db().get();
+    // Проверь доступ к проекту.
+    let group = DbFullProjectGroup::get_by_id(id, pool).await?;
+    if !group.projects.is_empty() {
+        return Err(CoreError::NoAccess(
+            "deleting project group",
+            group.group.group_name.to_string(),
+        ));
+    }
+    group.group.delete(pool).await.map_err(Into::into)
+}
+
+/// Обновит группу проектов в БД.
 async fn post_update_project_group_inner(
+    req: HttpRequest,
     proj_group: DbProjectGroup,
     ctx: &Arc<CoreCtx>,
 ) -> Result<()> {
     let pool = ctx.db().get();
+
+    let asaa_data = AsaaData::from_final_request(&req)?;
+    // Проверь доступ к проекту.
+    let group = DbFullProjectGroup::get_by_id(proj_group.pkey(), pool).await?;
+    permitted_projects(asaa_data, &group.projects)?;
+
     proj_group.update(pool).await.map_err(Into::into)
 }
 
@@ -69,20 +109,18 @@ async fn post_update_project_group_inner(
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 pub(crate) struct IncomingNewProjectGroup {
-    external_id: String,
     name: String,
 }
 
 impl IncomingNewProjectGroup {
     #[cfg(test)]
-    pub(crate) fn new(external_id: &str, name: &str) -> Self {
+    pub(crate) fn new(name: &str) -> Self {
         Self {
-            external_id: external_id.to_string(),
             name: name.to_string(),
         }
     }
 
     fn into_new(self) -> DbNewProjectGroup {
-        DbNewProjectGroup::new(self.external_id, self.name)
+        DbNewProjectGroup::new(self.name)
     }
 }

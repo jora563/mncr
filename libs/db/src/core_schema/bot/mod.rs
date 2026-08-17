@@ -9,13 +9,15 @@ use crate::core_schema::{CoreDbCrud, DbFullPlatform, DbPlatform, DbPlatformMirro
 use crate::error::{DbError, Result};
 
 /// Сущность проекта
-#[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, CoreDbCrud, FromRow, PartialEq, Deserialize, Serialize)]
 #[core_db_table = "bot_account"]
 pub struct DbBotAccount {
     #[core_db_skip_insert]
     id: i64,
     /// Ид. платформы к которой учетная запись бота принадлежит.
     pub platform_id: i64,
+    /// Ид проекта с которым бот связан.
+    pub project_id: Option<i64>,
     /// Наименование проекта
     pub external_id: String,
     /// Время закрытия заявки для этого определённого бота
@@ -25,6 +27,19 @@ pub struct DbBotAccount {
     pub token: Vec<u8>, // TODO: Более безопасный тип.
 }
 
+impl std::fmt::Debug for DbBotAccount {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("CoreDbSettings")
+            .field("id", &self.id)
+            .field("platform_id", &self.platform_id)
+            .field("project_id", &self.project_id)
+            .field("external_id", &self.external_id)
+            .field("expiry_time_hours", &self.expiry_time_hours)
+            .field("token", &"[hidden]")
+            .finish()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct DbNewBotAccount(DbBotAccount);
 
@@ -32,6 +47,7 @@ impl DbNewBotAccount {
     /// Создать новую учётную запись бота до вставления в БД.
     pub fn new<T: Into<String>>(
         platform: &DbPlatform,
+        project: Option<&DbProject>,
         external_id: T,
         ex: Option<i64>,
         token: Vec<u8>,
@@ -39,6 +55,7 @@ impl DbNewBotAccount {
         Self(DbBotAccount {
             id: 0,
             platform_id: platform.pkey(),
+            project_id: project.as_ref().map(|x| x.pkey()),
             external_id: external_id.into(),
             expiry_time_hours: ex,
             token,
@@ -53,13 +70,14 @@ impl DbNewBotAccount {
 }
 
 impl DbBotAccount {
-    pub(super) fn from_tuple(row: (i64, i64, String, Option<i64>, Vec<u8>)) -> Self {
+    pub(super) fn from_tuple(row: (i64, i64, String, Option<i64>, Vec<u8>, Option<i64>)) -> Self {
         Self {
             id: row.0,
             platform_id: row.1,
             external_id: row.2,
             expiry_time_hours: row.3,
             token: row.4,
+            project_id: row.5, // project_id is row 5 sine it was migrated.
         }
     }
 
@@ -68,7 +86,7 @@ impl DbBotAccount {
         let bots = sqlx::query_as::<_, DbBot>(
             "SELECT * FROM bot WHERE bot_account_id = $1 ORDER BY id ASC",
         )
-        .bind(self.id)
+        .bind(self.pkey())
         .fetch_all(ex)
         .await?;
         Ok(DbFullBotAccount {
@@ -226,24 +244,52 @@ pub struct DbBotAccountWithMeta {
     pub project: DbProject,
 }
 
-type MetaRet = (
-    i64,
-    i64,
-    String,
-    Option<i64>,
-    Vec<u8>,
-    i64,
-    crate::core_schema::ApiId,
-    String,
-    PrimitiveDateTime,
-    Option<PrimitiveDateTime>,
-    i64,
-    i64,
-    String,
-    String,
-    PrimitiveDateTime,
-    Option<PrimitiveDateTime>,
+#[allow(clippy::type_complexity)]
+struct MetaRet(
+    (
+        i64,
+        i64,
+        String,
+        Option<i64>,
+        Vec<u8>,
+        Option<i64>,
+        i64,
+        crate::core_schema::ApiId,
+        String,
+        PrimitiveDateTime,
+        Option<PrimitiveDateTime>,
+        i64,
+        i64,
+        String,
+        String,
+        PrimitiveDateTime,
+        Option<PrimitiveDateTime>,
+        String,
+    ),
 );
+
+macro_rules! more_rows {
+    ($r:expr, $($idx:expr;)+) => {
+        ($($r.get($idx as usize),)+)
+    };
+}
+
+impl<'r, R: sqlx::Row> FromRow<'r, R> for MetaRet
+where
+    usize: sqlx::ColumnIndex<R>,
+    i64: sqlx::decode::Decode<'r, R::Database> + sqlx::types::Type<R::Database>,
+    PrimitiveDateTime: sqlx::decode::Decode<'r, R::Database> + sqlx::types::Type<R::Database>,
+    crate::core_schema::ApiId:
+        sqlx::decode::Decode<'r, R::Database> + sqlx::types::Type<R::Database>,
+    String: sqlx::decode::Decode<'r, R::Database> + sqlx::types::Type<R::Database>,
+    Vec<u8>: sqlx::decode::Decode<'r, R::Database> + sqlx::types::Type<R::Database>,
+{
+    #[inline]
+    fn from_row(r: &'r R) -> std::result::Result<Self, sqlx::Error> {
+        let inner = more_rows!(r, 0; 1; 2; 3; 4; 5; 6; 7; 8; 9; 10; 11; 12; 13; 14; 15; 16; 17;);
+        Ok(MetaRet(inner))
+    }
+}
 
 impl DbBotAccountWithMeta {
     /// TODO: Do we need to dedup here? To be decided based on schema.
@@ -251,8 +297,7 @@ impl DbBotAccountWithMeta {
         let results = sqlx::query_as::<_, MetaRet>(
             "SELECT b.*, pl.*, proj.* FROM bot_account b
                 INNER JOIN platform pl ON b.platform_id = pl.id
-                INNER JOIN bot_account_project bap ON bap.account_id = b.id
-                INNER JOIN project proj ON proj.id = bap.project_id
+                INNER JOIN project proj ON proj.id = b.project_id
                 ORDER BY b.id ASC, pl.id",
         )
         .fetch_all(ex);
@@ -273,8 +318,7 @@ impl DbBotAccountWithMeta {
         let results = sqlx::query_as::<_, MetaRet>(
             "SELECT b.*, pl.*, proj.* FROM bot_account b
                 INNER JOIN platform pl ON b.platform_id = pl.id
-                INNER JOIN bot_account_project bap ON bap.account_id = b.id
-                INNER JOIN project proj ON proj.id = bap.project_id AND proj.id = $1
+                INNER JOIN project proj ON proj.id = b.project_id AND proj.id = $1
                 ORDER BY b.id ASC, pl.id",
         )
         .bind(proj_id)
@@ -293,7 +337,27 @@ impl DbBotAccountWithMeta {
 
     fn sort_results(res: Vec<MetaRet>, mirrors: Vec<DbPlatformMirror>) -> Vec<Self> {
         let mut ret = Vec::with_capacity(res.len());
-        for (a1, a2, a3, a4, a5, pl1, pl2, pl3, pl4, pl5, p1, p2, p3, p4, p5, p6) in res {
+        for MetaRet((
+            a1,
+            a2,
+            a3,
+            a4,
+            a5,
+            a6,
+            pl1,
+            pl2,
+            pl3,
+            pl4,
+            pl5,
+            p1,
+            p2,
+            p3,
+            p4,
+            p5,
+            p6,
+            p7,
+        )) in res
+        {
             let platform = DbPlatform::from_tuple((pl1, pl2, pl3, pl4, pl5));
             // Since platforms are repeated, we will clone mirrors.
             let mirrors = mirrors
@@ -302,9 +366,9 @@ impl DbBotAccountWithMeta {
                 .cloned()
                 .collect::<Vec<DbPlatformMirror>>();
             ret.push(Self {
-                account: DbBotAccount::from_tuple((a1, a2, a3, a4, a5)),
+                account: DbBotAccount::from_tuple((a1, a2, a3, a4, a5, a6)),
                 platform: DbFullPlatform { platform, mirrors },
-                project: DbProject::from_tuple((p1, p2, p3, p4, p5, p6)),
+                project: DbProject::from_tuple((p1, p2, p3, p4, p5, p6, p7)),
             });
         }
         ret

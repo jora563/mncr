@@ -3,7 +3,7 @@ use sqlx::PgExecutor;
 
 use super::*;
 use crate::core_schema::{
-    CoreDbCrud, DbBotAccount, DbChat, DbPlatform, DbProject, DbTicket, DbUser, DbUserAccount,
+    CoreDbCrud, DbChat, DbPlatform, DbProject, DbTicket, DbUser, DbUserAccount,
 };
 use crate::error::Result;
 
@@ -97,14 +97,6 @@ impl MoMa for DbUserAccountProject {
     type TypeB = DbProject;
     const FIELD_B: &'static str = "project_id";
     const TABLE: &'static str = "user_account_project";
-}
-
-impl MoMa for DbBotAccountProject {
-    type TypeA = DbBotAccount;
-    const FIELD_A: &'static str = "account_id";
-    type TypeB = DbProject;
-    const FIELD_B: &'static str = "project_id";
-    const TABLE: &'static str = "bot_account_project";
 }
 
 impl MoMa for DbTicketChat {

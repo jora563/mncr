@@ -1,198 +1,172 @@
-use crate::context::CoreCtx;
-use actix_web::{HttpResponse, Responder, get, web};
-use db::core_schema::{
-    CoreDbCrud, DbNewUser, DbNewUserAccount, DbPlatform, DbUser, DbUserAccount, DbVkOauth,
-    DbVkOauthState,
-};
-use db::error::DbError;
+use actix_web::{Responder, get, web};
 use serde::Deserialize;
 use std::sync::Arc;
 
-#[derive(Deserialize)]
+use crate::context::CoreCtx;
+use crate::error::CoreError;
+use crate::http_server::to_response::IntoHttpResponse;
+use db::core_schema::{
+    CoreDbCrud, DbNewUser, DbNewUserAccount, DbPlatform, DbPlatformMirror, DbUser, DbUserAccount,
+    DbVkOauth, DbVkOauthState,
+};
+use db::error::DbError;
+
+/// Базовый URL для OAuth и обмена токенов в VK.
+const VK_OAUTH_URL: &str = "https://oauth.vk.com";
+
+/// Параметры запроса, которые VK отправляет на callback-эндпоинт
+/// после успешной авторизации пользователя.
+#[derive(Deserialize, Debug)]
 pub struct VkCallbackQuery {
+    /// Временный код авторизации, который необходимо обменять на токен.
     pub code: String,
+    /// Уникальная строка состояния (state), сгенерированная нами при создании ссылки.
+    /// Используется для защиты от CSRF-атак и связывания запроса с пользователем.
     pub state: String,
 }
 
-#[get("/vk/callback")]
-pub async fn vk_callback(
-    data: web::Data<Arc<CoreCtx>>,
-    query: web::Query<VkCallbackQuery>,
-) -> impl Responder {
-    let ctx = data.get_ref();
+/// Структура для десериализации ответа от VK API при обмене
+/// authorization code на access_token.
+#[derive(Deserialize, Debug)]
+struct VkTokenResponse {
+    access_token: Option<String>,
+    user_id: Option<i64>,
+    error: Option<String>,
+}
+
+/// Структура для десериализации обёртки ответа от метода VK API `account.getInfo`.
+#[derive(Deserialize, Debug)]
+struct VkPhoneResponse {
+    response: Option<VkPhoneData>,
+}
+
+/// Полезная нагрузка ответа VK API, содержащая данные аккаунта,
+/// включая номер телефона.
+#[derive(Deserialize, Debug)]
+struct VkPhoneData {
+    phone: Option<String>,
+}
+
+/// Основная логика обработки callback-запроса от VK OAuth.
+async fn vk_callback_inner(ctx: Arc<CoreCtx>, query: VkCallbackQuery) -> Result<String, CoreError> {
     let pool = ctx.db().get();
 
-    // 1. Получаем state из БД
-    let state = match DbVkOauthState::get_by_state(&query.state, pool).await {
-        Ok(s) => s,
-        Err(DbError::NotFound { .. }) => {
-            return HttpResponse::BadRequest().body("Invalid or expired state");
-        }
-        Err(e) => {
-            tracing::error!("DB error getting state: {}", e);
-            return HttpResponse::InternalServerError().body("Internal error");
-        }
-    };
+    // 1. Получаем state из БД (DbError конвертируется в CoreError автоматически через #[from])
+    let state = DbVkOauthState::get_by_state(&query.state, pool).await?;
 
-    // 2. Получаем данные OAuth приложения
-    let oauth = match DbVkOauth::get_by_platform_id(state.platform_id, pool).await {
-        Ok(o) => o,
-        Err(_) => return HttpResponse::InternalServerError().body("OAuth config not found"),
-    };
+    // 2. Получаем данные OAuth приложения по project_id
+    let oauth = DbVkOauth::get_by_project_id(state.project_id, pool).await?;
 
-    // 3. Обмениваем code на access_token
+    // 3. Получаем base URL для API из platform_mirror
+    let mirrors = DbPlatformMirror::get_by_platform_id(state.platform_id, pool).await?;
+    let api_base_url = mirrors
+        .into_iter()
+        .next()
+        .map(|m| m.url)
+        .ok_or_else(|| "Platform mirror not found".to_string())?; // Конвертируется через From<String>
+
+    // 4. Обмениваем code на access_token
     let client = reqwest::Client::new();
-    // Получаем redirect_uri из конфигурации
     let redirect_uri = &ctx.cfg().core().vk_redirect_uri;
     let token_url = format!(
-        "https://oauth.vk.com/access_token?client_id={}&client_secret={}&redirect_uri={}&code={}",
+        "{}/access_token?client_id={}&client_secret={}&redirect_uri={}&code={}",
+        VK_OAUTH_URL,
         oauth.app_id,
         String::from_utf8_lossy(&oauth.secure_key),
         redirect_uri,
         query.code
     );
 
-    let token_resp = match client.get(&token_url).send().await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::error!("Error exchanging code: {}", e);
-            return HttpResponse::InternalServerError().body("Failed to exchange code");
-        }
-    };
+    // Для внешних библиотек (reqwest) добавляем контекст через map_err + From<String>
+    let token_resp = client
+        .get(&token_url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to exchange code: {}", e))?;
 
-    #[derive(Deserialize)]
-    struct VkTokenResponse {
-        access_token: Option<String>,
-        user_id: Option<i64>,
-        error: Option<String>,
-    }
-
-    let token_data: VkTokenResponse = match token_resp.json().await {
-        Ok(d) => d,
-        Err(e) => {
-            tracing::error!("Error parsing token response: {}", e);
-            return HttpResponse::InternalServerError().body("Invalid token response");
-        }
-    };
+    let token_data: VkTokenResponse = token_resp
+        .json()
+        .await
+        .map_err(|e| format!("Invalid token response: {}", e))?;
 
     if let Some(err) = token_data.error {
-        return HttpResponse::BadRequest().body(format!("VK error: {}", err));
+        return Err(format!("VK error: {}", err).into());
     }
 
-    let access_token = match token_data.access_token {
-        Some(t) => t,
-        None => return HttpResponse::InternalServerError().body("No access token in response"),
-    };
+    let access_token = token_data
+        .access_token
+        .ok_or_else(|| "No access token in response".to_string())?;
 
-    let vk_user_id = match token_data.user_id {
-        Some(id) => id,
-        None => return HttpResponse::InternalServerError().body("No user_id in response"),
-    };
+    let vk_user_id = token_data
+        .user_id
+        .ok_or_else(|| "No user_id in response".to_string())?;
 
-    // 4. Получаем номер телефона через VK API
+    // 5. Получаем номер телефона через VK API
     let phone_url = format!(
-        "https://api.vk.com/method/account.getInfo?user_id={}&fields=phone&access_token={}&v=5.199",
-        vk_user_id, access_token
+        "{}/method/account.getInfo?user_id={}&fields=phone&access_token={}&v=5.199",
+        api_base_url, vk_user_id, access_token
     );
 
-    let phone_resp = match client.get(&phone_url).send().await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::error!("Error getting phone: {}", e);
-            return HttpResponse::InternalServerError().body("Failed to get phone");
-        }
-    };
+    let phone_resp = client
+        .get(&phone_url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to get phone: {}", e))?;
 
-    #[derive(Deserialize)]
-    struct VkPhoneResponse {
-        response: Option<VkPhoneData>,
-        error: Option<serde_json::Value>,
-    }
+    let phone_data: VkPhoneResponse = phone_resp
+        .json()
+        .await
+        .map_err(|e| format!("Invalid phone response: {}", e))?;
 
-    #[derive(Deserialize)]
-    struct VkPhoneData {
-        phone: Option<String>,
-    }
+    let phone = phone_data
+        .response
+        .and_then(|r| r.phone)
+        .ok_or_else(|| "Phone number not provided or error in VK API".to_string())?;
 
-    let phone_data: VkPhoneResponse = match phone_resp.json().await {
-        Ok(d) => d,
-        Err(e) => {
-            tracing::error!("Error parsing phone response: {}", e);
-            return HttpResponse::InternalServerError().body("Invalid phone response");
-        }
-    };
-
-    let phone = match phone_data.response.and_then(|r| r.phone) {
-        Some(p) => p,
-        None => {
-            return HttpResponse::BadRequest().body("Phone number not provided or error in VK API");
-        }
-    };
-
-    // 5. Обновляем или создаём пользователя в БД
+    // 6. Обновляем или создаём пользователя в БД
     let user_account = match DbUserAccount::get_by_external_id(&state.user_ext_id, pool).await {
         Ok(ua) => Some(ua),
         Err(DbError::NotFound { .. }) => None,
-        Err(e) => {
-            tracing::error!("DB error getting user account: {}", e);
-            return HttpResponse::InternalServerError().body("Internal error");
-        }
+        Err(e) => return Err(e.into()), // Явный .into() для DbError внутри match
     };
 
-    let user = match DbUser::try_get_by_phone(&phone, pool).await {
+    let mut user = match DbUser::try_get_by_phone(&phone, pool).await {
         Ok(Some(u)) => u,
         Ok(None) => {
-            // Создаём нового пользователя
             let new_user = DbNewUser::new(&phone, "VK User");
-            match new_user.insert(pool).await {
-                Ok(u) => u,
-                Err(e) => {
-                    tracing::error!("Error creating user: {}", e);
-                    return HttpResponse::InternalServerError().body("Failed to create user");
-                }
-            }
+            new_user.insert(pool).await? // Автоматическая конвертация DbError -> CoreError
         }
-        Err(e) => {
-            tracing::error!("DB error getting user by phone: {}", e);
-            return HttpResponse::InternalServerError().body("Internal error");
-        }
+        Err(e) => return Err(e.into()),
     };
 
-    if let Some(ua) = user_account {
-        // Если учётная запись уже существует, проверяем привязку
+    if let Some(mut ua) = user_account {
         if ua.user_id != user.pkey() {
-            // Перепривязываем учётную запись к пользователю с этим телефоном
-            if let Err(e) = ua.update_user_id(user.pkey(), pool).await {
-                tracing::error!("Error re-linking user account: {}", e);
-                return HttpResponse::InternalServerError().body("Failed to update user account");
-            }
+            ua.update_user_id(user.pkey(), pool).await?;
         } else if user.phone.is_empty() || user.phone == "unknown" {
-            // Обновляем телефон, если он был пустым
-            if let Err(e) = user.update_phone(&phone, pool).await {
-                tracing::error!("Error updating user phone: {}", e);
-                return HttpResponse::InternalServerError().body("Failed to update user phone");
-            }
+            user.update_phone(&phone, pool).await?;
         }
     } else {
-        // Создаём новую учётную запись
-        let platform = match DbPlatform::get_by_id(state.platform_id, pool).await {
-            Ok(p) => p,
-            Err(e) => {
-                tracing::error!("Error getting platform: {}", e);
-                return HttpResponse::InternalServerError().body("Internal error");
-            }
-        };
+        let platform = DbPlatform::get_by_id(state.platform_id, pool).await?;
         let new_ua = DbNewUserAccount::new(&user, &platform, &state.user_ext_id, "VK User");
-        if let Err(e) = new_ua.insert(pool).await {
-            tracing::error!("Error creating user account: {}", e);
-            return HttpResponse::InternalServerError().body("Failed to create user account");
-        }
+        new_ua.insert(pool).await?;
     }
 
-    // 6. Удаляем использованный state
+    // 7. Удаляем использованный state (ошибка здесь не критична, просто логируем)
     if let Err(e) = DbVkOauthState::delete_by_state(&query.state, pool).await {
         tracing::error!("Error deleting state: {}", e);
     }
 
-    HttpResponse::Ok().body("Phone number verified successfully! You can close this window.")
+    Ok("Phone number verified successfully! You can close this window.".to_string())
+}
+
+/// HTTP-эндпоинт для обработки callback-запроса от VK OAuth.
+#[get("/vk/callback")]
+pub async fn vk_callback(
+    data: web::Data<Arc<CoreCtx>>,
+    query: web::Query<VkCallbackQuery>,
+) -> impl Responder {
+    let ctx = data.get_ref().clone();
+    let query = query.into_inner();
+
+    vk_callback_inner(ctx, query).await.into_response()
 }

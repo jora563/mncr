@@ -1,10 +1,12 @@
 -- OAuth данные для standalone приложения VK.
--- Содержит идентификатор приложения, секретный ключ и сервисный токен.
+-- Содержит идентификатор приложения, секретный ключ и сервисный token.
 CREATE TABLE vk_oauth
 (
  id BIGSERIAL PRIMARY KEY,
  -- Ссылка на платформу (VK инстанцию).
  platform_id BIGINT NOT NULL REFERENCES platform(id) ON DELETE RESTRICT,
+ -- Ссылка на проект.
+ project_id BIGINT NOT NULL REFERENCES project(id) ON DELETE RESTRICT UNIQUE,
  -- Идентификатор standalone приложения VK.
  app_id BIGINT NOT NULL,
  -- Секретный ключ приложения (protected key).
@@ -27,6 +29,8 @@ CREATE TABLE vk_oauth_state
  user_ext_id VARCHAR(255) NOT NULL,
  -- Платформа (VK инстанция), через которую идет авторизация.
  platform_id BIGINT NOT NULL REFERENCES platform(id) ON DELETE RESTRICT,
+ -- Проект, для которого идет авторизация.
+ project_id BIGINT NOT NULL REFERENCES project(id) ON DELETE RESTRICT UNIQUE,
  -- Время создания state.
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

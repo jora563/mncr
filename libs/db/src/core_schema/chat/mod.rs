@@ -109,7 +109,7 @@ impl<'a> DbNewChat<'a> {
             );
             return Err(DbError::validation_fail("Messenger Chat", &msg));
         }
-        if !moma::DbBotAccountProject::exists(self.bot_account, self.project, &mut **ex).await? {
+        if self.bot_account.project_id != Some(self.project.pkey()) {
             let msg = format!(
                 "Bot account {} not part of project {}.",
                 self.bot_account.external_id, self.project.project_name

@@ -10,9 +10,11 @@ db = { path = "../libs/db" }
 llm = { path = "../libs/llm" }
 llm-client = { path = "../libs/llm_client" }
 queue = { path = "../libs/queue" }
+uzor_plugin = { path = "../libs/uzor_plugin" }
 
 actix-web.workspace = true
 ahash.workspace = true
+futures.workspace = true
 serde.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
@@ -32,3 +34,8 @@ serde_json.workspace = true
 
 [dev-dependencies]
 reqwest.workspace = true
+uzor_plugin = { path = "../libs/uzor_plugin", features = ["mock_server"] }
+
+[features]
+external-keycloak = []
+external-asaa = []

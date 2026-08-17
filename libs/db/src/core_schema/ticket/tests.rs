@@ -12,7 +12,7 @@ async fn test_validate_ticket() {
         "tests/sql/postgres/drop_core",
         |pool| async move {
             let user = DbNewUser::new("+79451234567", "The Red Ranger");
-            let project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+            let project_group = DbNewProjectGroup::new("Telecorp")
                 .insert(&pool)
                 .await
                 .unwrap();
@@ -51,7 +51,7 @@ async fn test_ticket_crud() {
         "tests/sql/postgres/drop_core",
         |pool| async move {
             let user = DbNewUser::new("+79451234567", "The Red Ranger");
-            let project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+            let project_group = DbNewProjectGroup::new("Telecorp")
                 .insert(&pool)
                 .await
                 .unwrap();
@@ -111,24 +111,29 @@ async fn test_full_ticket() {
                 .await
                 .unwrap();
             let user = DbNewUser::new("+79451234567", "The Red Ranger");
-            let mut project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+            let mut project_group = DbNewProjectGroup::new("Telecorp")
                 .insert(&pool)
                 .await
                 .unwrap();
             project_group.insert(&pool).await.unwrap();
             let user = user.insert(&pool).await.unwrap();
 
-            let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
-            let bot_account =
-                DbNewBotAccount::new(&platform, "RB-890123", None, b"password".to_vec());
-
-            let user_account = user_account.insert(&pool).await.unwrap();
-            let bot_account = bot_account.insert(&pool).await.unwrap();
-
             let project = DbNewProject::new(&project_group, "AKUWDHWA-8691", "The Big Spam")
                 .insert(&pool)
                 .await
                 .unwrap();
+
+            let user_account = DbNewUserAccount::new(&user, &platform, "PWRR-001", "Red");
+            let bot_account = DbNewBotAccount::new(
+                &platform,
+                Some(&project),
+                "RB-890123",
+                None,
+                b"password".to_vec(),
+            );
+
+            let user_account = user_account.insert(&pool).await.unwrap();
+            let bot_account = bot_account.insert(&pool).await.unwrap();
 
             let started = time::macros::datetime!(2024-01-01 00:02);
             let topic = "Сломалась сенокосилка и унитаз";
@@ -138,9 +143,6 @@ async fn test_full_ticket() {
                 .await
                 .unwrap();
             moma::DbUserAccountProject::link(&user_account, &project, &pool)
-                .await
-                .unwrap();
-            moma::DbBotAccountProject::link(&bot_account, &project, &pool)
                 .await
                 .unwrap();
             let mut ticket = new_ticket.insert(&pool).await.unwrap();

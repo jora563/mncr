@@ -10,18 +10,19 @@ RUN apt update
 # Install some basics
 # TODO: Check that this is all we need.
 RUN apt-get install -y \
+    build-essential \
+    ca-certificates \
+    curl \
     gcc \
-    openssl \
-    libssl-dev \
-    sudo curl \
+    git \
     iputils-ping \
-    wget \
+    libssl-dev \
+    openssl \
+    pkg-config \
     postgresql-16 \
-    postgresql-client-16
-
-# Install necessary SQL and development related
-RUN apt-get install -y \
-    git
+    postgresql-client-16 \
+    sudo curl \
+    wget
 
 # Download rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rust-installer.sh

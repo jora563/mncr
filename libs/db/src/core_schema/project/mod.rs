@@ -19,9 +19,9 @@ pub struct DbProject {
     pub external_id: String,
     /// Наименование проекта
     pub project_name: String,
-    #[core_db_skip_insert]
     pub created_on: PrimitiveDateTime,
     pub altered_on: Option<PrimitiveDateTime>,
+    pub altered_by: String,
 }
 
 #[derive(Clone, Debug)]
@@ -38,8 +38,9 @@ impl DbNewProject {
             project_group_id: group.id,
             external_id: external_id.into(),
             project_name: name.into(),
-            created_on: PrimitiveDateTime::MIN,
+            created_on: time::macros::datetime!(0000-01-01 00:00:00),
             altered_on: None,
+            altered_by: "unknown".to_string(),
         })
     }
 
@@ -60,6 +61,7 @@ impl DbProject {
             String,
             PrimitiveDateTime,
             Option<PrimitiveDateTime>,
+            String,
         ),
     ) -> Self {
         Self {
@@ -69,6 +71,7 @@ impl DbProject {
             project_name: row.3,
             created_on: row.4,
             altered_on: row.5,
+            altered_by: row.6,
         }
     }
 
@@ -96,6 +99,20 @@ impl DbProject {
             .ok_or_else(|| DbError::not_found("DbProject", "external_id", ext_id))?;
         Ok(res)
     }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn get_by_names<E>(names: &[&str], ex: E) -> Result<Vec<Self>>
+    where
+        E: for<'a> sqlx::PgExecutor<'a>,
+    {
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM project WHERE project_name = ANY($1) ORDER BY created_on ASC",
+        )
+        .bind(names)
+        .fetch_all(ex)
+        .await
+        .map_err(Into::into)
+    }
 }
 
 /// Сущность группы к которой принадлежит проект
@@ -104,8 +121,6 @@ impl DbProject {
 pub struct DbProjectGroup {
     #[core_db_skip_insert]
     id: i64,
-    /// Внешняя десигнация в системе заказчика
-    pub external_id: String,
     /// Наименование группы
     pub group_name: String,
     #[core_db_skip_insert]
@@ -117,10 +132,9 @@ pub struct DbProjectGroup {
 pub struct DbNewProjectGroup(DbProjectGroup);
 
 impl DbNewProjectGroup {
-    pub fn new<T: Into<String>, S: Into<String>>(external: T, name: S) -> Self {
+    pub fn new<S: Into<String>>(name: S) -> Self {
         Self(DbProjectGroup {
             id: 0,
-            external_id: external.into(),
             group_name: name.into(),
             created_on: PrimitiveDateTime::MIN,
             altered_on: None,

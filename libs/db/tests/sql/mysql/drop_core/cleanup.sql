@@ -1,7 +1,6 @@
 TRUNCATE TABLE project_platform;
 TRUNCATE TABLE project_user;
 TRUNCATE TABLE user_account_project;
-TRUNCATE TABLE bot_account_project;
 TRUNCATE TABLE query_ticket_chat;
 
 TRUNCATE TABLE bot;

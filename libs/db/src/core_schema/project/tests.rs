@@ -9,7 +9,7 @@ async fn test_project_group_crud() {
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
         |pool| async move {
-            let project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+            let project_group = DbNewProjectGroup::new("Telecorp")
                 .insert(&pool)
                 .await
                 .unwrap();
@@ -19,7 +19,6 @@ async fn test_project_group_crud() {
 
             assert_eq!(pg.id, id);
             assert_eq!(project_group.id, id);
-            assert_eq!(pg.external_id, project_group.external_id);
             assert_eq!(pg.group_name, project_group.group_name);
             assert_eq!(pg.created_on, project_group.created_on);
             assert_eq!(pg.altered_on, project_group.altered_on);
@@ -47,7 +46,7 @@ async fn test_project_crud() {
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
         |pool| async move {
-            let project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+            let project_group = DbNewProjectGroup::new("Telecorp")
                 .insert(&pool)
                 .await
                 .unwrap();
@@ -67,6 +66,7 @@ async fn test_project_crud() {
             assert_eq!(p.project_name, project.project_name);
             assert_eq!(p.created_on, project.created_on);
             assert_eq!(p.altered_on, project.altered_on);
+            assert_eq!(p.altered_by, project.altered_by);
 
             p.project_name = "The Biggest Spam".to_string();
             p.update(&pool).await.unwrap();
@@ -100,7 +100,7 @@ async fn test_full_project_group() {
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
         |pool| async move {
-            let project_group = DbNewProjectGroup::new("LQIWEUDBQLWDBQW", "Telecorp")
+            let project_group = DbNewProjectGroup::new("Telecorp")
                 .insert(&pool)
                 .await
                 .unwrap();
@@ -138,6 +138,14 @@ async fn test_full_project_group() {
             assert_eq!(fg.projects[1].project_name, p2.project_name);
             assert_eq!(fg.projects[2].project_name, p3.project_name);
             assert_eq!(fg.projects[3].project_name, p4.project_name);
+
+            let named = DbProject::get_by_names(&["The Big Spam", "The AI Spam"], &pool)
+                .await
+                .unwrap();
+
+            assert_eq!(named.len(), 2);
+            assert_eq!(named[0].pkey(), p1.pkey());
+            assert_eq!(named[1].pkey(), p3.pkey());
             Ok(())
         },
     )

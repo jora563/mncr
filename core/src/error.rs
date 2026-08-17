@@ -8,6 +8,8 @@ pub type Result<T> = std::result::Result<T, CoreError>;
 
 #[derive(Debug, Error)]
 pub(crate) enum CoreError {
+    #[error("No Access: No access for {0} \"{1}\".")]
+    NoAccess(&'static str, String),
     #[error("AI Core Server is misconfigured. Field: {field}, value: {value}")]
     ConfigError { field: String, value: String },
     #[error("Environmental variable error: {0}")]
@@ -40,6 +42,8 @@ pub(crate) enum CoreError {
     Parse(#[from] std::num::ParseIntError),
     #[error("Queue interface error")]
     QueueError,
+    #[error("Uzor plugin error: {0}")]
+    UzorPlugin(#[from] uzor_plugin::error::UzorPluginError),
 }
 
 impl CoreError {
