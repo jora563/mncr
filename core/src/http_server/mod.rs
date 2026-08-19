@@ -83,6 +83,11 @@ fn configure_server(cfg: &mut web::ServiceConfig, server_cfg: Config) {
                         .service(admin_api::post_update_bot_account)
                         .service(admin_api::post_update_project)
                         .service(admin_api::post_update_project_group),
+                )
+                .service(
+                    web::scope("/operator_api")
+                        .wrap(actix_web::middleware::from_fn(uzor_plugin::operator_gate))
+                        .service(operator_api::chat),
                 ),
         );
 }
@@ -122,6 +127,7 @@ fn permitted_projects(asaa_data: uzor_plugin::AsaaData, projects: &[DbProject]) 
 }
 
 mod admin_api;
+mod operator_api;
 mod to_response;
 mod vk_callback;
 

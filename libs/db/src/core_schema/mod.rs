@@ -24,7 +24,7 @@ pub use platform::{
     ApiId, DbFullPlatform, DbNewPlatform, DbNewPlatformMirror, DbPlatform, DbPlatformMirror,
 };
 pub use project::{DbFullProjectGroup, DbNewProject, DbNewProjectGroup, DbProject, DbProjectGroup};
-pub use ticket::{DbFullTicket, DbNewTicket, DbTicket};
+pub use ticket::{DbFullTicket, DbNewTicket, DbTicket, DbTicketCloseStatus};
 pub use user::{DbFullUser, DbNewUser, DbNewUserAccount, DbUser, DbUserAccount};
 pub use vk_oauth::{DbNewVkOauth, DbNewVkOauthState, DbVkOauth, DbVkOauthState};
 

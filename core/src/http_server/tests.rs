@@ -6,11 +6,15 @@ use crate::context::CoreCtx;
 use crate::http_server::admin_api::{
     IncomingNewBotAccount, IncomingNewProject, IncomingNewProjectGroup,
 };
+use crate::http_server::operator_api::ws_protocol as wsp;
 
 use db::core_schema::*;
 use db::test_frame::{ConfigDriver, run_test_postgres};
-use futures::StreamExt;
+use futures_util::StreamExt;
+use futures_util::sink::SinkExt;
 use reqwest::StatusCode;
+use reqwest_websocket as rwsc;
+use reqwest_websocket::Upgrade;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -20,7 +24,7 @@ const ADMIN_TOKEN: &str = "Bearer \
     eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIwOTRiMDgyMC0zZTIyLTQzMDYtODM1YS1iNTFiNjY5MmU2NzEifQ.\
     ewogICJwZXJzb25hbF9pZCI6InNvbWUtcGVyc29uYWwtaWQiLAogICJyb2xlIjoiYWRtaW4iCn0=.\
     fake-verification";
-const _OPERATOR_TOKEN: &str = "Bearer \
+const OPERATOR_TOKEN: &str = "Bearer \
     eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIwOTRiMDgyMC0zZTIyLTQzMDYtODM1YS1iNTFiNjY5MmU2NzEifQ.\
     ewogICJwZXJzb25hbF9pZCI6InNvbWUtcGVyc29uYWwtaWQiLAogICJyb2xlIjoib3BlcmF0b3IiCn0=.\
     fake-verification";
@@ -30,33 +34,116 @@ struct KeycloakResponse {
     access_token: String,
 }
 
-struct ServerTestDriver;
+struct ServerTestDriverAdmin;
 
-impl ConfigDriver for ServerTestDriver {
+impl ConfigDriver for ServerTestDriverAdmin {
     fn initialise() -> Self {
         Self
     }
     fn db_name_root(&self) -> Box<str> {
-        "ai_omni_server_test_db".into()
+        "ai_omni_server_admin_test_db".into()
     }
     fn db_host(&self) -> Box<str> {
         "postgresql://aio_core:password@127.0.0.1:5432".into()
     }
 }
 
+struct ServerTestDriverOperator;
+
+impl ConfigDriver for ServerTestDriverOperator {
+    fn initialise() -> Self {
+        Self
+    }
+    fn db_name_root(&self) -> Box<str> {
+        "ai_omni_server_operator_test_db".into()
+    }
+    fn db_host(&self) -> Box<str> {
+        "postgresql://aio_core:password@127.0.0.1:5432".into()
+    }
+}
+
+async fn query_keycloak_token(
+    ctx: &CoreCtx,
+    token: &str,
+    host: &str,
+    client: &reqwest::Client,
+) -> String {
+    let auth_cfg = ctx.cfg().auth().to_owned();
+
+    let our_realm = auth_cfg.realm().to_owned();
+    let client_id = auth_cfg.client_id().to_owned();
+    let client_secret = auth_cfg.client_secret().map(|x| x.to_string()).unwrap();
+
+    // Если у нас внешний keycloak то мы у него запрашиваем токен.
+    if cfg!(feature = "external-keycloak") {
+        let data = [
+            ("client_id", &client_id as &str),
+            ("client_secret", &client_secret as &str),
+            ("grant_type", "password"),
+            ("username", "105127"),
+            ("password", "user-1"),
+        ];
+        let res = client
+            .post(format!(
+                "http://{host}:9999/realms/{our_realm}/protocol/openid-connect/token"
+            ))
+            .form(&data.into_iter().collect::<HashMap<_, _>>())
+            .send()
+            .await
+            .unwrap();
+        let text = res.text().await.unwrap();
+        println!("token response: {text}");
+        let res: KeycloakResponse = serde_json::from_str(&text).unwrap();
+        res.access_token
+    } else {
+        token.to_string()
+    }
+}
+
+fn mock_auth_service(ctx: &CoreCtx) -> tokio::task::JoinHandle<()> {
+    let auth_cfg = ctx.cfg().auth().to_owned();
+
+    // Если у нас внешний keycloak то мы не запускаем собственный сервер.
+    tokio::task::spawn(async move {
+        if cfg!(feature = "external-asaa") && cfg!(feature = "external-keycloak") {
+            // Do nothing if everything is external.
+        } else if cfg!(feature = "external-asaa") {
+            // If only asaa is external, run keycloak internally
+            uzor_plugin::mock_server::run_mock_keycloak_server(&auth_cfg)
+                .await
+                .inspect_err(|e| println!("Server run error: {e:?}"))
+                .unwrap();
+        } else if cfg!(feature = "external-keycloak") {
+            // if only keycloak is internal, run asaa internally
+            uzor_plugin::mock_server::run_mock_asaa_server(&auth_cfg)
+                .await
+                .inspect_err(|e| println!("Server run error: {e:?}"))
+                .unwrap();
+        } else {
+            // If nothing is external, run everything internally.
+            uzor_plugin::mock_server::run_mock_auth_servers(&auth_cfg)
+                .await
+                .inspect_err(|e| println!("Server run error: {e:?}"))
+                .unwrap();
+        };
+    })
+}
+
 /// Все тесты сервера бегут в одном тесте чтобы не долбаться с настройками баз данных.
 /// NB: Тест обычно проворачивается с мок-токеном, но его можно также провернуть с
 /// настоящим токеном полученом из настоящего keycloak. В таком случае настройки keycloak
 /// в конфигурационных файлах должна соответствовать данным реальной инстанции keycloak.
+/// NB: This may not work properly with external keycloak, if the roles are not set up properly
+///     on the keycloak instance.
+/// NB: This may not work properly with external ASAA if the projects do not match those for the user.
 #[tokio::test]
 async fn test_server_admin_api() {
-    run_test_postgres::<ServerTestDriver, _>(
+    run_test_postgres::<ServerTestDriverAdmin, _, ()>(
         "../sql/core/",
         "test/fixture/",
         "test/cleanup/",
         |_| async move {
-            let mut config = Config::from_file("test/server-test-config.toml").unwrap();
-
+            let mut config = Config::from_file("test/server-admin-test-config.toml").unwrap();
 
             // Jenkins docker in docker builds do not like the words "localhost"
             let host = if std::env::var("AIOMNI_JENKINS_BUILD").is_ok() {
@@ -68,7 +155,6 @@ async fn test_server_admin_api() {
                 "localhost"
             };
 
-
             let ctx = Arc::new(CoreCtx::new(config).await.unwrap());
             let ctx2 = ctx.clone();
 
@@ -76,35 +162,8 @@ async fn test_server_admin_api() {
                 let _ = super::run_server(ctx2).await.inspect_err(|e| println!("Server run error: {e}"));
             });
 
-            let auth_cfg = ctx.cfg().auth().to_owned();
-            let our_realm = auth_cfg.realm().to_owned();
-            let client_id = auth_cfg.client_id().to_owned();
-            let client_secret = auth_cfg.client_secret().map(|x| x.to_string()).unwrap();
-
             // Если у нас внешний keycloak то мы не запускаем собственный сервер.
-            let mock_auth_services = tokio::task::spawn(async move {
-                if cfg!(feature = "external-asaa") && cfg!(feature = "external-keycloak") {
-                // Do nothing if everything is external.
-                } else if cfg!(feature = "external-asaa") {
-                // If only asaa is external, run keycloak internally
-                    uzor_plugin::mock_server::run_mock_keycloak_server(&auth_cfg)
-                        .await
-                        .inspect_err(|e| println!("Server run error: {e:?}"))
-                        .unwrap();
-                } else if cfg!(feature = "external-keycloak") {
-                    // if only keycloak is internal, run asaa internally
-                    uzor_plugin::mock_server::run_mock_asaa_server(&auth_cfg)
-                        .await
-                        .inspect_err(|e| println!("Server run error: {e:?}"))
-                        .unwrap();
-                } else {
-                    // If nothing is external, run everything internally.
-                    uzor_plugin::mock_server::run_mock_auth_servers(&auth_cfg)
-                        .await
-                        .inspect_err(|e| println!("Server run error: {e:?}"))
-                        .unwrap();
-                };
-            });
+            let mock_auth_services = mock_auth_service(&ctx);
             println!("Sleeping for 400ms..");
             tokio::time::sleep(std::time::Duration::from_millis(400)).await;
             println!("Host name: {host}");
@@ -112,27 +171,7 @@ async fn test_server_admin_api() {
             let client = reqwest::Client::new();
 
             // Если у нас внешний keycloak то мы у него запрашиваем токен.
-            let admin_token = if cfg!(feature = "external-keycloak") {
-                let data = [
-                    ("client_id", &client_id as &str),
-                    ("client_secret", &client_secret as &str),
-                    ("grant_type", "password"),
-                    ("username", "105127"),
-                    ("password", "user-1"),
-                ];
-                let res = client
-                    .post(format!("http://{host}:9999/realms/{our_realm}/protocol/openid-connect/token"))
-                    .form(&data.into_iter().collect::<HashMap<_, _>>())
-                    .send()
-                    .await
-                    .unwrap();
-                let text = res.text().await.unwrap();
-                println!("token response: {text}");
-                let res: KeycloakResponse  = serde_json::from_str(&text).unwrap();
-                res.access_token
-            } else {
-                ADMIN_TOKEN.to_string()
-            };
+            let admin_token = query_keycloak_token(&ctx, ADMIN_TOKEN, host, &client).await;
             ///////////////////////////////////////////////////////////////////
             // Healthcheck
             let response = client
@@ -545,4 +584,148 @@ async fn test_server_admin_api() {
         },
     )
     .await
+}
+
+/// Все тесты сервера бегут в одном тесте чтобы не долбаться с настройками баз данных.
+/// NB: This may not work properly with external keycloak, if the roles are not set up properly
+///     on the keycloak instance.
+/// NB: This may not work properly with external ASAA if the projects do not match those for the user.
+#[tokio::test]
+async fn test_server_operator_api() {
+    run_test_postgres::<ServerTestDriverOperator, _, ()>(
+        "../sql/core/",
+        "test/fixture/",
+        "test/cleanup/",
+        |_| async move {
+            let mut config = Config::from_file("test/server-operator-test-config.toml").unwrap();
+
+            // Jenkins docker in docker builds do not like the words "localhost"
+            let host = if std::env::var("AIOMNI_JENKINS_BUILD").is_ok() {
+                println!("Building on Jenkins... ");
+                config.auth_mut().set_asaa_home("http://127.0.0.1:9090");
+                config.auth_mut().set_keycloak_home("http://127.0.0.1:9090");
+                "127.0.0.1"
+            } else {
+                "localhost"
+            };
+
+            let ctx = Arc::new(CoreCtx::new(config).await.unwrap());
+            let ctx2 = ctx.clone();
+
+            let service = tokio::task::spawn(async move {
+                let _ = super::run_server(ctx2)
+                    .await
+                    .inspect_err(|e| println!("Server run error: {e}"));
+            });
+            // Wait for launch.
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+
+            println!("Host name: {host}");
+            let client = reqwest::Client::new();
+
+            let token = query_keycloak_token(&ctx, OPERATOR_TOKEN, host, &client).await;
+            let mock_auth_services = mock_auth_service(&ctx);
+
+            // Try to websocket on operator_api with the right headers
+            let response = client
+                .get(format!("ws://{host}:8082/v1/operator_api/chat"))
+                // `reqwest_websocket` works like this.
+                .header("Connection", "upgrade")
+                .header("Upgrade", "websocket")
+                .header("Sec-WebSocket-Version", "13")
+                .header("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+                .header(AUTH, &token)
+                .upgrade()
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::SWITCHING_PROTOCOLS);
+
+            let mut socket = response.into_websocket().await.unwrap();
+
+            ///////////////////////////////////////////////////////////////////
+            // Message history get request.
+            //////////////////////////////////
+            let inner = wsp::WsRequest::MessageHistoryGet(wsp::MessageHistoryGetRequest {
+                ticket_id: 1,
+                last_message_id: None,
+                count: None,
+            });
+            let event = send_recv_ws_event(&mut socket, wsp::WsRequestMsg::new(1, inner)).await;
+
+            assert_eq!(event.request_id, Some(1));
+            assert!(matches!(event.inner, wsp::WsEvent::MessageHistoryGot(_)));
+
+            ///////////////////////////////////////////////////////////////////
+            // IFrame request.
+            /////////////////////
+            let inner = wsp::WsRequest::IFrameGet(wsp::IFrameGetRequest);
+            let event = send_recv_ws_event(&mut socket, wsp::WsRequestMsg::new(12, inner)).await;
+
+            assert_eq!(event.request_id, Some(12));
+            assert!(matches!(event.inner, wsp::WsEvent::IFrameGot(_)));
+
+            ///////////////////////////////////////////////////////////////////
+            // ChatStatusChangedEvent request.
+            /////////////////////
+            let inner = wsp::WsRequest::ChatStatusChange(wsp::ChatStatusChangeRequest {
+                ticket_id: 1,
+                ticket_status: 4,
+            });
+            let event = send_recv_ws_event(&mut socket, wsp::WsRequestMsg::new(23, inner)).await;
+
+            assert_eq!(event.request_id, Some(23));
+            assert!(matches!(event.inner, wsp::WsEvent::ChatStatusChanged(_)));
+
+            ///////////////////////////////////////////////////////////////////
+            // ChatStatusChangedEvent request with error (ticket does not exist).
+            ////////////////////////////////////////////////////////////////////////
+            let inner = wsp::WsRequest::ChatStatusChange(wsp::ChatStatusChangeRequest {
+                ticket_id: 99999,
+                ticket_status: 4,
+            });
+            let event = send_recv_ws_event(&mut socket, wsp::WsRequestMsg::new(23, inner)).await;
+
+            assert_eq!(event.request_id, None);
+            assert!(matches!(event.inner, wsp::WsEvent::Error(_)));
+
+            ///////////////////////////////////////////////////////////////////
+            // MessageSendRequest request.
+            /////////////////////////////////
+            // NB: This test works because there are no chats connected to the messengers, so
+            // nothing is sent to the chats.
+            let inner = wsp::WsRequest::MessageSend(wsp::MessageSendRequest {
+                ticket_id: 99999,
+                message: "I like green eggs. I like green eggs and ham.".into(),
+            });
+            let event = send_recv_ws_event(&mut socket, wsp::WsRequestMsg::new(34, inner)).await;
+
+            assert_eq!(event.request_id, None);
+            assert!(matches!(event.inner, wsp::WsEvent::Error(_)));
+
+            service.abort();
+            mock_auth_services.abort();
+            Ok(())
+        },
+    )
+    .await
+}
+
+/// A send and receive function for websocket tests for DRY.
+async fn send_recv_ws_event(soc: &mut rwsc::WebSocket, req: wsp::WsRequestMsg) -> wsp::WsEventMsg {
+    let req = wsp::WsTextMessage::Request(req);
+    let inner_msg = serde_json::to_string(&req).unwrap();
+    println!("{inner_msg}");
+    let req = rwsc::Message::Text(inner_msg);
+
+    soc.send(req).await.unwrap();
+
+    let event = match soc.next().await.unwrap().unwrap() {
+        rwsc::Message::Text(event) => event,
+        x => panic!("Expected text, got god knows what: {x:?}"),
+    };
+    let wsp::WsTextMessage::Event(event) = serde_json::from_str(&event).unwrap() else {
+        panic!("Serde says no.");
+    };
+    event
 }

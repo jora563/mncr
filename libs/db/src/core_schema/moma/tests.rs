@@ -12,7 +12,7 @@ const CLEAN: &str = "tests/sql/postgres/drop_core";
 
 #[tokio::test]
 async fn test_ticket_chat() {
-    run_test_postgres::<TestCfg, _>(MIG, FIX, CLEAN, |pool| async move {
+    run_test_postgres::<TestCfg, _, ()>(MIG, FIX, CLEAN, |pool| async move {
         let mut s = full_setup(&pool).await;
         // Add tickets.
         setup_tickets_annex(&mut s, &pool).await;
@@ -77,7 +77,7 @@ async fn test_ticket_chat() {
 
 #[tokio::test]
 async fn test_user_account_project() {
-    run_test_postgres::<TestCfg, _>(MIG, FIX, CLEAN, |pool| async move {
+    run_test_postgres::<TestCfg, _, ()>(MIG, FIX, CLEAN, |pool| async move {
         let s = full_setup(&pool).await;
 
         let project = DbUserAccountProject::get_for_account(s.user_accounts[0].pkey(), &pool)
@@ -142,7 +142,7 @@ async fn test_user_account_project() {
 
 #[tokio::test]
 async fn test_project_user() {
-    run_test_postgres::<TestCfg, _>(MIG, FIX, CLEAN, |pool| async move {
+    run_test_postgres::<TestCfg, _, ()>(MIG, FIX, CLEAN, |pool| async move {
         let mut s = full_setup(&pool).await;
         setup_chats_annex(&mut s, &pool).await;
 
@@ -204,7 +204,7 @@ async fn test_project_user() {
 
 #[tokio::test]
 async fn test_project_platform() {
-    run_test_postgres::<TestCfg, _>(MIG, FIX, CLEAN, |pool| async move {
+    run_test_postgres::<TestCfg, _, ()>(MIG, FIX, CLEAN, |pool| async move {
         let mut s = full_setup(&pool).await;
         setup_chats_annex(&mut s, &pool).await;
 

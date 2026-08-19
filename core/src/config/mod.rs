@@ -6,6 +6,7 @@ use chat::models::Platform;
 use db::connect::CoreDbSettings;
 use db::core_schema::ApiId;
 use llm_client::config::{LlmClientCfg, LlmRequestCfg};
+use queue::config::QueueConfig;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use uzor_plugin::config::GetUzorPluginConfig;
@@ -103,12 +104,13 @@ pub struct ConsulConfig {
 /// ТОДО: Настройки модулей будут подключатся по ходу их исполнения.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct Config {
+    auth: UzorPluginConfig,
     chat: ChatConfig,
+    consul: ConsulConfig,
     core: CoreSettings,
     db: CoreDbSettings,
     llm: LlmConfig,
-    auth: UzorPluginConfig,
-    consul: ConsulConfig,
+    queue: QueueConfig,
 }
 
 /// Настройки центрального приложения.
@@ -132,6 +134,9 @@ pub struct CoreSettings {
     /// рабочею нить сервера.
     /// см. <https://docs.rs/actix-web/latest/actix_web/struct.HttpServer.html#method.worker_max_blocking_threads>
     pub(crate) server_max_blocking_threads: u8,
+    /// Время содержания соединения через WebSocket с операторами, если соединение молчит, до
+    /// его отключение.
+    pub(crate) operator_idle_timeout_s: u16,
     /// Redirect URI для VK OAuth callback.
     /// Должен быть зарегистрирован в настройках VK приложения.
     pub(crate) vk_redirect_uri: String,
@@ -150,6 +155,7 @@ impl Default for CoreSettings {
             server_port: 8081,
             server_worker_count: 2,
             server_max_blocking_threads: 2,
+            operator_idle_timeout_s: 300,
             vk_redirect_uri: "https://localhost:8081/vk/callback".to_string(),
             fe_dir: ".test-settings/test-fe".to_string(),
         }
@@ -170,6 +176,9 @@ impl Config {
     #[allow(dead_code)]
     pub(super) fn auth(&self) -> &UzorPluginConfig {
         &self.auth
+    }
+    pub(super) fn queue(&self) -> &QueueConfig {
+        &self.queue
     }
     #[allow(dead_code)]
     pub(super) fn chat(&self) -> &ChatConfig {

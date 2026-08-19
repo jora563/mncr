@@ -12,10 +12,16 @@ llm-client = { path = "../libs/llm_client" }
 queue = { path = "../libs/queue" }
 uzor_plugin = { path = "../libs/uzor_plugin" }
 
+actix-http.workspace = true
 actix-web.workspace = true
+actix-ws.workspace = true
 ahash.workspace = true
+bytes.workspace = true
+bytestring.workspace = true
 futures.workspace = true
+reqwest.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 time.workspace = true
@@ -29,11 +35,12 @@ tokio = { workspace = true, features = [
 tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true
-reqwest.workspace = true
-serde_json.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
+futures-util.workspace = true
 reqwest.workspace = true
+reqwest-websocket.workspace = true
 uzor_plugin = { path = "../libs/uzor_plugin", features = ["mock_server"] }
 
 [features]

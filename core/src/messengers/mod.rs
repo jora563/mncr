@@ -150,41 +150,68 @@ impl ChatDriver {
             reply_to_message_id: reply_to,
             reply_markup,
         };
+        let mirrors = TgMirrors {
+            urls: platform
+                .platform
+                .mirrors
+                .iter()
+                .map(|m| m.url.clone())
+                .collect(),
+        };
 
         match platform.platform.platform.api_id {
             ApiId::Telegram => {
-                let mirrors = TgMirrors {
-                    urls: platform
-                        .platform
-                        .mirrors
-                        .iter()
-                        .map(|m| m.url.clone())
-                        .collect(),
-                };
                 let cred = TgCredentials::from_bytes(&platform.account.token)?;
                 let session = TgSession { cred, mirrors };
 
-                self.tg
-                    .send_message(&request, session)
-                    .await
-                    .map_err(CoreError::ChatLib)
+                self.tg.send_message(&request, session).await?;
             }
             ApiId::Vk => {
-                let mirrors: Vec<String> = platform
-                    .platform
-                    .mirrors
-                    .iter()
-                    .map(|m| m.url.clone())
-                    .collect();
-                let cred = VkCredentials::from_bytes(&platform.account.token, mirrors)
-                    .map_err(CoreError::ChatLib)?;
-                self.vk
-                    .send_message(&request, cred)
-                    .await
-                    .map_err(CoreError::ChatLib)
+                let cred = VkCredentials::from_bytes(&platform.account.token, mirrors.urls)?;
+                self.vk.send_message(&request, cred).await?;
             }
-            ApiId::Max => Err(CoreError::ChatApiDisconnected(ApiId::Max)),
-        }
+            ApiId::Max => return Err(CoreError::ChatApiDisconnected(ApiId::Max)),
+        };
+        Ok(())
+    }
+
+    /// Послать сообщение от оператора
+    #[tracing::instrument(skip_all)]
+    pub(crate) async fn send_message_from_operator(
+        &self,
+        msg_text: &str,
+        chat: &DbChat,
+        platform: &DbBotAccountWithMeta,
+    ) -> Result<()> {
+        let request = SendMessageRequest {
+            chat_id: chat.external_id.to_owned(),
+            text: msg_text.to_string(),
+            reply_to_message_id: None,
+            reply_markup: None,
+        };
+        let mirrors = TgMirrors {
+            urls: platform
+                .platform
+                .mirrors
+                .iter()
+                .map(|m| m.url.clone())
+                .collect(),
+        };
+
+        match platform.platform.platform.api_id {
+            ApiId::Telegram => {
+                let cred = TgCredentials::from_bytes(&platform.account.token)?;
+                let session = TgSession { cred, mirrors };
+
+                self.tg.send_message(&request, session).await?;
+            }
+            ApiId::Vk => {
+                let cred = VkCredentials::from_bytes(&platform.account.token, mirrors.urls)?;
+                self.vk.send_message(&request, cred).await?;
+            }
+            ApiId::Max => return Err(CoreError::ChatApiDisconnected(ApiId::Max)),
+        };
+        Ok(())
     }
 }
 

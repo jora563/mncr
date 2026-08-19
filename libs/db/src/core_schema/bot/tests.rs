@@ -8,7 +8,7 @@ use crate::error::DbError;
 
 #[tokio::test]
 async fn test_bot_crud() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -53,7 +53,7 @@ async fn test_bot_crud() {
 
 #[tokio::test]
 async fn test_bot_account_crud() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -97,7 +97,7 @@ async fn test_bot_account_crud() {
 
 #[tokio::test]
 async fn test_full_bot() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -169,7 +169,7 @@ async fn test_full_bot() {
 
 #[tokio::test]
 async fn test_get_bots_for_platforms() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -239,7 +239,7 @@ async fn test_get_bots_for_platforms() {
 
 #[tokio::test]
 async fn test_get_bots_with_meta() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -329,6 +329,40 @@ async fn test_get_bots_with_meta() {
             assert_eq!(bot_meta[5].platform.platform, platforms[2]);
             assert_eq!(bot_meta[5].project, project2);
 
+            let bot_meta_prj2 = DbBotAccountWithMeta::get_for_project(project1.pkey(), &pool)
+                .await
+                .unwrap();
+
+            assert_eq!(bot_meta_prj2.len(), 3);
+
+            assert_eq!(bot_meta_prj2[0].account, bot_accounts[0]);
+            assert_eq!(bot_meta_prj2[0].platform.platform, platforms[0]);
+            assert_eq!(bot_meta_prj2[0].project, project1);
+            assert_eq!(bot_meta_prj2[1].account, bot_accounts[2]);
+            assert_eq!(bot_meta_prj2[1].platform.platform, platforms[1]);
+            assert_eq!(bot_meta_prj2[1].project, project1);
+            assert_eq!(bot_meta_prj2[2].account, bot_accounts[4]);
+            assert_eq!(bot_meta_prj2[2].platform.platform, platforms[2]);
+            assert_eq!(bot_meta_prj2[2].project, project1);
+
+            let bot_ids = bot_accounts[0..2]
+                .iter()
+                .map(|x| x.pkey())
+                .collect::<Vec<_>>();
+
+            let bot_meta_for_ids = DbBotAccountWithMeta::get_by_ids(&bot_ids, &pool)
+                .await
+                .unwrap();
+
+            assert_eq!(bot_meta_for_ids.len(), 2);
+
+            assert_eq!(bot_meta_for_ids[0].account, bot_accounts[0]);
+            assert_eq!(bot_meta_for_ids[0].platform.platform, platforms[0]);
+            assert_eq!(bot_meta_for_ids[0].project, project1);
+            assert_eq!(bot_meta_for_ids[1].account, bot_accounts[1]);
+            assert_eq!(bot_meta_for_ids[1].platform.platform, platforms[0]);
+            assert_eq!(bot_meta_for_ids[1].project, project2);
+
             Ok(())
         },
     )
@@ -337,7 +371,7 @@ async fn test_get_bots_with_meta() {
 
 #[tokio::test]
 async fn test_get_bots_ticket_expiry() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",

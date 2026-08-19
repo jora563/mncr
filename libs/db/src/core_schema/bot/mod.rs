@@ -335,6 +335,28 @@ impl DbBotAccountWithMeta {
         Ok(ret)
     }
 
+    /// TODO: Do we need to dedup here? To be decided based on schema.
+    pub async fn get_by_ids(bot_account_ids: &[i64], ex: &PgPool) -> Result<Vec<Self>> {
+        let results = sqlx::query_as::<_, MetaRet>(
+            "SELECT b.*, pl.*, proj.* FROM bot_account b
+                INNER JOIN platform pl ON b.platform_id = pl.id AND b.id = ANY($1)
+                INNER JOIN project proj ON proj.id = b.project_id
+                ORDER BY b.id ASC, pl.id",
+        )
+        .bind(bot_account_ids)
+        .fetch_all(ex);
+
+        let mirrors = sqlx::query_as::<_, DbPlatformMirror>(
+            "SELECT * FROM platform_mirror ORDER BY platform_id DESC",
+        )
+        .fetch_all(ex);
+
+        let (results, mirrors) = tokio::join!(results, mirrors);
+        let ret = Self::sort_results(results?, mirrors?);
+
+        Ok(ret)
+    }
+
     fn sort_results(res: Vec<MetaRet>, mirrors: Vec<DbPlatformMirror>) -> Vec<Self> {
         let mut ret = Vec::with_capacity(res.len());
         for MetaRet((

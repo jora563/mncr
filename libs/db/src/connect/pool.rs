@@ -168,7 +168,7 @@ mod test {
     #[tokio::test]
     async fn test_load() {
         // Используем тестфрэйм чтобы гарантировать существование БД.
-        run_test_postgres::<TestCfg, _>(
+        run_test_postgres::<TestCfg, _, ()>(
             "../../sql/core/",
             "../../sql/core/",
             "tests/sql/postgres/drop_core",
@@ -202,7 +202,7 @@ mod test {
     #[tokio::test]
     async fn test_migrator() {
         // Используем тестфрэйм чтобы гарантировать существование БД.
-        run_test_postgres::<TestCfg, _>(
+        run_test_postgres::<TestCfg, _, ()>(
             "../../sql/core/",
             "../../sql/core/",
             "tests/sql/postgres/drop_core",

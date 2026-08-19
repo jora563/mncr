@@ -18,3 +18,6 @@ TRUNCATE TABLE
     project,
     project_group
 RESTART IDENTITY CASCADE;
+
+-- Уничтожить псевдо-бд очереди.
+DROP TABLE IF EXISTS last_operator, queued_ticket;

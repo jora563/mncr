@@ -96,6 +96,16 @@ pub fn db_crud(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                     .map_err(Into::into)
             }
 
+            /// Достать. NB: Если используем `#[core_db_id]` и ключ не настоящий, то достаём только первый
+            /// Случай. Фунцкии чтобы достать все надо делать в ручную (но они и не есть CRUD).
+            pub async fn try_get_by_id<'a, T: sqlx::PgExecutor<'a>>(id: i64, exc: T) -> crate::error::Result<Option<Self>> {
+                sqlx::query_as::<_, Self>(sqlx::AssertSqlSafe(#get_by_id_str as &str))
+                    .bind(id)
+                    .fetch_optional(exc)
+                    .await
+                    .map_err(Into::into)
+            }
+
             /// Удалить
             pub async fn delete_by_id<'a, T: sqlx::PgExecutor<'a>>(id: i64, exc: T) -> crate::error::Result<()> {
                 sqlx::query(sqlx::AssertSqlSafe(#delete_str as &str))

@@ -5,7 +5,7 @@ use db::test_frame::run_test_postgres;
 /// allows to run 4 tests in parallel.
 #[tokio::test]
 async fn test_1_test_4_dbs() {
-    let f1 = run_test_postgres::<Ptc, _>(
+    let f1 = run_test_postgres::<Ptc, _, ()>(
         "tests/sql/postgres/",
         "tests/sql/postgres/extra_fixtures",
         "tests/sql/postgres/",
@@ -21,7 +21,7 @@ async fn test_1_test_4_dbs() {
             Ok(())
         },
     );
-    let f2 = run_test_postgres::<Ptc, _>(
+    let f2 = run_test_postgres::<Ptc, _, ()>(
         "tests/sql/postgres/",
         "tests/sql/postgres/extra_fixtures",
         "tests/sql/postgres/",
@@ -37,7 +37,7 @@ async fn test_1_test_4_dbs() {
             Ok(())
         },
     );
-    let f3 = run_test_postgres::<Ptc, _>(
+    let f3 = run_test_postgres::<Ptc, _, ()>(
         "tests/sql/postgres/",
         "tests/sql/postgres/extra_fixtures",
         "tests/sql/postgres/",
@@ -53,7 +53,7 @@ async fn test_1_test_4_dbs() {
             Ok(())
         },
     );
-    let f4 = run_test_postgres::<Ptc, _>(
+    let f4 = run_test_postgres::<Ptc, _, ()>(
         "tests/sql/postgres/",
         "tests/sql/postgres/extra_fixtures",
         "tests/sql/postgres/",
@@ -74,7 +74,7 @@ async fn test_1_test_4_dbs() {
 
 #[tokio::test]
 async fn test_2_select() {
-    run_test_postgres::<Ptc, _>(
+    run_test_postgres::<Ptc, _, ()>(
         "tests/sql/postgres/",
         "tests/sql/postgres/extra_fixtures",
         "tests/sql/postgres/",
@@ -91,7 +91,7 @@ async fn test_2_select() {
 
 #[tokio::test]
 async fn test_3_select() {
-    run_test_postgres::<Ptc, _>(
+    run_test_postgres::<Ptc, _, ()>(
         "tests/sql/postgres/",
         "tests/sql/postgres/extra_fixtures",
         "tests/sql/postgres/",
@@ -110,7 +110,7 @@ async fn test_3_select() {
 
 #[tokio::test]
 async fn test_4() {
-    run_test_postgres::<Ptc, _>(
+    run_test_postgres::<Ptc, _, ()>(
         "tests/sql/postgres/",
         "tests/sql/postgres/extra_fixtures",
         "tests/sql/postgres/",

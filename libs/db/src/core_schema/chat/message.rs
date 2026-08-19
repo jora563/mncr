@@ -343,22 +343,6 @@ pub struct DbFullMessage {
 }
 
 impl DbFullMessage {
-    /// Достать все полные сообщения по какой-то теме.
-    pub async fn get_for_ticket(q_id: i64, ex: &PgPool) -> Result<Vec<DbFullMessage>> {
-        let messages = sqlx::query_as::<_, DbMessage>(
-            "SELECT * FROM \"message\" WHERE query_ticket_id=$1 ORDER BY created_on ASC",
-        )
-        .bind(q_id)
-        .fetch_all(ex)
-        .await?;
-        let attachments = sqlx::query_as::<_, DbAttachment>(
-            "SELECT * FROM \"attachment\" WHERE message_id = ANY(SELECT id FROM message WHERE query_ticket_id=$1)"
-        )
-            .bind(q_id)
-            .fetch_all(ex)
-            .await?;
-        Ok(Self::from_many(messages, attachments))
-    }
     /// Достать все полные сообщения из какого-то чата.
     pub async fn get_for_chat(q_id: i64, ex: &PgPool) -> Result<Vec<DbFullMessage>> {
         let messages = sqlx::query_as::<_, DbMessage>(
@@ -371,6 +355,55 @@ impl DbFullMessage {
             "SELECT * FROM \"attachment\" WHERE message_id = ANY(SELECT id FROM message WHERE messenger_chat_id=$1)"
         )
             .bind(q_id)
+            .fetch_all(ex)
+            .await?;
+        Ok(Self::from_many(messages, attachments))
+    }
+
+    /// Достать все полные сообщения по какой-то теме.
+    pub async fn get_for_ticket(q_id: i64, ex: &PgPool) -> Result<Vec<DbFullMessage>> {
+        Self::get_history(q_id, None, None, ex).await
+    }
+
+    /// Достать историю сообщений начиная с определенного сообщения. Также ограничить по числу.
+    pub async fn get_history(
+        ticket_id: i64,
+        last_message_id: Option<i64>,
+        count: Option<u32>,
+        ex: &PgPool,
+    ) -> Result<Vec<DbFullMessage>> {
+        // Create extra clauses.
+        let date_clause = match last_message_id {
+            Some(_) => " AND id > $2",
+            None => "",
+        };
+        let count_clause = match count {
+            Some(_) => " LIMIT $3",
+            None => "",
+        };
+
+        // Create main query.
+        let mut query = sqlx::query_as::<_, DbMessage>(sqlx::AssertSqlSafe(format!(
+            "SELECT * FROM \"message\"
+                WHERE query_ticket_id=$1{date_clause}
+                ORDER BY created_on ASC{count_clause}",
+        )))
+        .bind(ticket_id);
+
+        // Bind extra variables.
+        if let Some(id) = last_message_id {
+            query = query.bind(id);
+        };
+        if let Some(count) = count {
+            query = query.bind(count as i64);
+        };
+
+        let messages = query.fetch_all(ex).await?;
+        // We get more attachments than we need, but `from_many` should sort them correctly.
+        let attachments = sqlx::query_as::<_, DbAttachment>(
+            "SELECT * FROM \"attachment\" WHERE message_id = ANY(SELECT id FROM message WHERE query_ticket_id=$1)"
+        )
+            .bind(ticket_id)
             .fetch_all(ex)
             .await?;
         Ok(Self::from_many(messages, attachments))

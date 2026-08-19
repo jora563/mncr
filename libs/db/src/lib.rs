@@ -4,8 +4,10 @@ pub mod connect;
 pub mod core_schema;
 /// Модуль ошибок
 pub mod error;
+/// Вспомогательная схема Queue
+pub mod queue_schema;
 /// Копия <https://bitbucket.telecontact.ru/projects/TELECONTACT/repos/telecontact-rust-libs/>
 pub mod test_frame;
 
 /// TODO: Может нужна библиотека реэкспорта
-pub use sqlx::types::time::PrimitiveDateTime;
+pub use sqlx::types::time::{Date, PrimitiveDateTime, Time};

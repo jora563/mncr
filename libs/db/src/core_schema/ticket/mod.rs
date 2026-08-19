@@ -1,11 +1,37 @@
 //! Сущности тикета/темы
 use db_derive::CoreDbCrud;
+use serde::{Deserialize, Serialize};
 use sqlx::types::time::PrimitiveDateTime;
 use sqlx::{Acquire, FromRow, PgExecutor, PgPool, Postgres};
 
 use crate::core_schema::moma::{DbProjectUser, MoMa};
 use crate::core_schema::{CoreDbCrud, DbFullMessage, DbProject, DbUser};
 use crate::error::{DbError, Result};
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, sqlx::Type, Serialize)]
+#[repr(i16)]
+#[sqlx(type_name = "SMALLINT")]
+pub enum DbTicketCloseStatus {
+    Ongoing = 0,
+    EscalationOngoing = 1,
+    ClosedOk = 2,
+    ClosedNoResolution = 3,
+    ClosedAfterEscalation = 4,
+}
+
+impl DbTicketCloseStatus {
+    /// Грамотно из числа статус создать.
+    pub fn from_i16(n: i16) -> Result<Self> {
+        match n {
+            0 => Ok(Self::Ongoing),
+            1 => Ok(Self::EscalationOngoing),
+            2 => Ok(Self::ClosedOk),
+            3 => Ok(Self::ClosedNoResolution),
+            4 => Ok(Self::ClosedAfterEscalation),
+            x => Err(DbError::BadTicketStatus(x)),
+        }
+    }
+}
 
 /// Тема/Тикет
 #[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq)]
@@ -21,7 +47,7 @@ pub struct DbTicket {
     /// Ид проекта с которым тема связан
     pub project_id: i64,
     /// Статус темы (в основном с каким результатом закрыта)
-    pub close_status: i16,
+    pub close_status: DbTicketCloseStatus,
     /// текст темы
     pub topic: String,
     /// Когда тема начата
@@ -52,7 +78,7 @@ impl<'a, 'b> DbNewTicket<'a, 'b> {
             user_ticket_number: 0,
             user_id: user.pkey(),
             project_id: project.pkey(),
-            close_status: 0,
+            close_status: DbTicketCloseStatus::Ongoing,
             topic: topic.to_string(),
             started_on,
             latest_post_on: None,

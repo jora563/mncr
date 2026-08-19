@@ -7,6 +7,7 @@ use crate::messengers::ChatDriver;
 
 use db::connect::CoreDbPool;
 use db::core_schema::DbBotAccountWithMeta;
+use queue::Queue;
 
 /// Контекст
 /// ТОДО: Нужен ли нам `Arc<RwLock<T>>` или даже `ArcSwap`?
@@ -24,21 +25,26 @@ pub(crate) struct CoreCtx {
     chat: ChatDriver,
     /// Сущность взаимодействия с LLM
     llm: LlmDriver<llm_client::openai::OpenAiRequest>,
+    /// Карта соединений с операторами, для того чтобы отправлять им сообщения.
+    ws_chats: ws_chats::WsChats,
     /// Сущность взаимодействия с очередью
-    _queue: (),
+    queue: Queue,
 }
 
 impl CoreCtx {
     /// Создать контекст.
     pub(crate) async fn new(cfg: Config) -> Result<Self> {
         let db = CoreDbPool::new(cfg.db()).await?;
+        let queue = Queue::from_cfg(cfg.queue()).await?;
+        let ws_chats = ws_chats::WsChats::new(cfg.core());
 
         Ok(Self {
             db,
             chat: ChatDriver::default(),
             llm: LlmDriver::new(&cfg)?,
             cfg,
-            _queue: (),
+            ws_chats,
+            queue,
         })
     }
     pub(crate) fn cfg(&self) -> &Config {
@@ -53,6 +59,12 @@ impl CoreCtx {
     pub(crate) fn llm(&self) -> &LlmDriver<llm_client::openai::OpenAiRequest> {
         &self.llm
     }
+    pub(crate) fn queue(&self) -> &Queue {
+        &self.queue
+    }
+    pub(crate) fn ws_chats(&self) -> &WsChats {
+        &self.ws_chats
+    }
 
     /// Загрузить изначальные боты вместе с их платформа.
     /// В далнейшем эти платформы определяют к каким API чата мы обращаемся,
@@ -63,3 +75,7 @@ impl CoreCtx {
         Ok(bot_meta)
     }
 }
+
+mod ws_chats;
+
+pub(crate) use ws_chats::*;

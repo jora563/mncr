@@ -6,7 +6,7 @@ use crate::error::DbError;
 
 #[tokio::test]
 async fn test_validate_ticket() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -45,7 +45,7 @@ async fn test_validate_ticket() {
 
 #[tokio::test]
 async fn test_ticket_crud() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -101,7 +101,7 @@ async fn test_ticket_crud() {
 
 #[tokio::test]
 async fn test_full_ticket() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",

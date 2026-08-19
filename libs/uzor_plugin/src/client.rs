@@ -118,6 +118,14 @@ impl PermissionReExtract for AsaaData {
     const HEADER_KEY: &str = "core-permitted-projects";
 }
 
+impl AsaaData {
+    /// Функция позволяет достать наименования проектов одним ходом.
+    pub fn projects(req: &HttpRequest) -> Result<Vec<String>> {
+        let projects = Self::from_final_request(req)?;
+        Ok(projects.projects.into_iter().map(|x| x.name).collect())
+    }
+}
+
 /// Послать в Keycloak запрос о валидности токена.
 // curl
 //  -u "client_id:client_secret"

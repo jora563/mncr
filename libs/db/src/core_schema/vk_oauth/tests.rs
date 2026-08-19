@@ -4,7 +4,7 @@ use crate::core_schema::{ApiId, CoreDbCrud, DbNewPlatform, DbNewProject, DbNewPr
 
 #[tokio::test]
 async fn test_vk_oauth_insert_and_get() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -57,7 +57,7 @@ async fn test_vk_oauth_insert_and_get() {
 
 #[tokio::test]
 async fn test_vk_oauth_unique_constraint() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -111,7 +111,7 @@ async fn test_vk_oauth_unique_constraint() {
 
 #[tokio::test]
 async fn test_vk_oauth_state_insert_and_get() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -163,7 +163,7 @@ async fn test_vk_oauth_state_insert_and_get() {
 
 #[tokio::test]
 async fn test_vk_oauth_state_delete() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -209,7 +209,7 @@ async fn test_vk_oauth_state_delete() {
 
 #[tokio::test]
 async fn test_vk_oauth_state_unique_constraint() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",

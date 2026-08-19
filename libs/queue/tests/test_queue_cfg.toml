@@ -1,0 +1,15 @@
+ping_period_s = 30
+operator_lifetime_s = 600
+
+[db]
+max_connections = 4
+min_connections = 1
+max_no_log_connections = 1
+acquire_timeout_s = 30
+max_lifetime_s = 3600
+idle_timeout_s = 60
+db_host_url = "localhost"
+db_name = "intrinsic_queue_test_db_0"
+migrations_home = "sql/queue/"
+user = "aio_core"
+pw = "password"

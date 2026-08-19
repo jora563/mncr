@@ -4,6 +4,7 @@ use super::config::ConfigDriver;
 use super::db_list::{DbList, NameDb};
 use super::{DB_LIST, DbLock, Result};
 
+use ahash::AHashMap;
 use sqlx::AssertSqlSafe;
 use sqlx::migrate::{Migrate, MigrateDatabase, Migrator};
 use sqlx::{Acquire, Connection, Database, Executor, Pool, Postgres};
@@ -67,54 +68,71 @@ where
 ///
 /// Сначала проводятся миграции из "{migration_dir}/up/" директории, потом
 /// сами тесты, потом скрипт очистки из "{cleanup_dir}/cleanup.sql" файла.
-pub async fn run_test_postgres<C, F>(
+pub async fn run_test_postgres<C, F, T>(
     mig_dir: &str,
     extra_fixtures_dir: &str,
     cleanup_dir: &str,
-    test_fn: fn(Pool<Postgres>) -> F,
-) where
+    test_fn: impl FnOnce(Pool<Postgres>) -> F + Send + 'static,
+) -> T
+where
     C: ConfigDriver,
-    F: Future<Output = Result<()>> + Send + 'static,
+    F: Future<Output = Result<T>> + Send + 'static,
+    T: Send + Sync + 'static,
 {
     use std::error::Error;
 
     let f = std::time::Instant::now();
-    let r = run_test_inner::<C, Postgres, F>(
+    let r = run_test_inner::<C, Postgres, F, T>(
         &DB_LIST,
         mig_dir,
         extra_fixtures_dir,
         cleanup_dir,
         test_fn,
     );
-    if let Err(e) = r.await {
-        panic!("Test failed: {e}: {:?}", e.source());
-    }
+    let r = match r.await {
+        Err(e) => panic!("Test failed: {e}: {:?}", e.source()),
+        Ok(r) => r,
+    };
     println!("Whole test: {:?}", f.elapsed());
+    r
 }
 
 /// NB: Broken things outside of the test permanently lock the database for the rest
 ///     of the test series. This is a feature, not a bug.
-async fn run_test_inner<C, D, F>(
+async fn run_test_inner<C, D, F, T>(
     list: &DbLock<D>,
     migrations_dir: &str,
     extra_fixtures_dir: &str,
     cleanup_dir: &str,
-    test_fn: fn(Pool<D>) -> F,
-) -> Result<()>
+    test_fn: impl FnOnce(Pool<D>) -> F + Send + 'static,
+) -> Result<T>
 where
     C: ConfigDriver,
     D: Database + MigrateDatabase,
-    F: Future<Output = Result<()>> + Send + 'static,
+    F: Future<Output = Result<T>> + Send + 'static,
     for<'a> <<&'a Pool<D> as Acquire<'a>>::Connection as Deref>::Target: Migrate,
     for<'a> &'a mut <D as Database>::Connection: Executor<'a>,
     DbList<D>: NameDb,
+    T: Send + Sync + 'static,
 {
     let test_config = C::initialise();
     let name = test_config.db_name_root();
     let address = test_config.db_host();
 
-    let db_list = list.get_or_init(|| Arc::new(Mutex::new(DbList::new(&address, &name))));
-    let (pool, db_ref) = db_list.lock().await.get_pool().await?;
+    // If different root names are used, we create a new database list for each one,
+    // else we end up getting tangled in names.
+    let db_list = list.get_or_init(|| {
+        let mut map = AHashMap::new();
+        map.insert(name.clone(), DbList::new(&address, &name));
+        Arc::new(Mutex::new(map))
+    });
+    let (pool, db_ref) = db_list
+        .lock()
+        .await
+        .entry(name.clone())
+        .or_insert_with(|| DbList::new(&address, &name))
+        .get_pool()
+        .await?;
     println!("DBREF={db_ref:?}");
     let _ = db_list;
 
@@ -142,13 +160,17 @@ where
     let handle = tokio::task::spawn(async move { test_fn(pool).await });
 
     // Collect the results.
+    let mut output = None;
     let (success, msg) = match handle.await {
         // If the test panics we should get here.
         Err(e) => (false, format!("Panic in test: {e}")),
         // If we have a result in the test we should end up here.
         Ok(Err(e)) => (false, format!("Error in test: {e}")),
         // If the test is executed successfully then we end up here.
-        Ok(_) => (true, "Test success".to_string()),
+        Ok(Ok(x)) => {
+            output = Some(x);
+            (true, "Test success".to_string())
+        }
     };
     println!("TEST RESULT {:?}: {msg}", e.elapsed());
     // Get the cleanup script.
@@ -170,12 +192,18 @@ where
     let db_list = list
         .get()
         .ok_or_else(|| std::io::Error::other("This is initialised earlier in this fn"))?;
-    let name = db_ref.db_ref.name.to_string();
-    db_list.lock().await.free(&db_ref.db_ref.name).await?;
+    let db_name = db_ref.db_ref.name.to_string();
+    db_list
+        .lock()
+        .await
+        .get_mut(&name)
+        .expect("Impossible lock")
+        .free(&db_ref.db_ref.name)
+        .await?;
     // Display result.
     if !success {
-        let msg = format!("TEST FAILED: {msg}\n    ON: {name}");
+        let msg = format!("TEST FAILED: {msg}\n    ON: {db_name}");
         return Err(std::io::Error::other(msg).into());
     }
-    Ok(())
+    Ok(output.expect("Guaranteed by previous checks."))
 }

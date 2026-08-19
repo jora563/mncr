@@ -1,12 +1,13 @@
 use std::sync::Arc;
 use std::sync::OnceLock;
 
+use ahash::AHashMap;
 use tokio::sync::Mutex;
 
 use self::db_list::DbList;
 
 /// TODO: Забыть когда `OnceLock::get_mut_or_init` войдёт в stable.
-type DbLock<D> = OnceLock<Arc<Mutex<DbList<D>>>>;
+type DbLock<D> = OnceLock<Arc<Mutex<AHashMap<Box<str>, DbList<D>>>>>;
 
 /// Глобальная переменная чтобы отслеживать временные тестовые БД
 static DB_LIST: DbLock<sqlx::Postgres> = OnceLock::new();

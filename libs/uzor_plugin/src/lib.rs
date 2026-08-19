@@ -126,12 +126,15 @@ async fn inner_gate(
     next.call(req).await
 }
 
+/// Утилита чтобы только операторы проходили через эту проверку.
 pub async fn operator_gate(
     req: ServiceRequest,
     next: Next<impl MessageBody>,
 ) -> Result<ServiceResponse<impl MessageBody>, Error> {
     inner_gate(req, "operator", next).await
 }
+
+/// Утилита чтобы только администраторы проходили через эту проверку.
 pub async fn admin_gate(
     req: ServiceRequest,
     next: Next<impl MessageBody>,

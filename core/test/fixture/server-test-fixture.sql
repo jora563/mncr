@@ -38,6 +38,9 @@ INSERT INTO public.bot_account (platform_id,external_id,expiry_time_hours,projec
 	 (2,'WGB-1',6,2,''),
 	 (1,'VKB-1',24,2,'');
 
+INSERT INTO query_ticket(user_id,project_id,close_status,started_on,topic) VALUES
+	(2,2,0,'2026-06-11 16:34:24.84347','Cookies');
+
 
 INSERT INTO public.user_account_project (account_id,project_id) VALUES
 	 (1,2),
@@ -51,3 +54,21 @@ INSERT INTO public.project_platform (project_id,platform_id) VALUES
 	 (1,2),
 	 (2,2),
 	 (3,3);
+
+-- создать псевдо бд очереди.
+CREATE TABLE queued_ticket(
+    ticket_id BIGINT NOT NULL PRIMARY KEY,
+    last_operator TEXT,
+    added_to_queue TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    vip_level BIGINT NOT NULL,
+    ticket_status SMALLINT NOT NULL
+);
+
+CREATE TABLE last_operator(
+    id BIGSERIAL PRIMARY KEY,
+    ext_id TEXT NOT NULL,
+    last_ticket_id BIGINT NOT NULL REFERENCES queued_ticket(ticket_id),
+    work_started TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    last_check_in TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    in_work BOOLEAN NOT NULL
+);

@@ -41,7 +41,7 @@ ___
 
 
 ___
-## HTTP(S)/WS API [⚠️Будет дорабатываться⚠️]
+## HTTP(S) API [⚠️Будет дорабатываться⚠️]
 
 У AIOMNI Core будет несколько API которые могут вызывать посторонние клиенты.
 
@@ -455,3 +455,364 @@ ___
     }
   ```
 - Response: OK 200
+
+
+___
+## WS API [⚠️Будет дорабатываться⚠️]
+
+WS API для оператора вызывается одним методом. После первоначального вызова и перехода на WS протокол, сообщения передаются по созданному каналу.
+
+___
+### Методы
+
+#### Начать чат / подсоединится к серверу CORE
+
+Для входа, оператор должен иметь:
+- Валидный токен авторизации Keycloak по которому в ASAA есть доступ к тем проектам к которым оператор имеет отношение.
+- Headers:
+  - Connection: upgrade
+  - Upgrade: websocket
+  - Sec-WebSocket-Version: 13
+  - Sec-Websocket-Key: ???
+- Method: GET
+- Protocol: ws
+- Route: /v1/operator_api/chat
+- Auth: BEARER
+- Request: - 
+- Response: Switching Protocols 101
+
+
+___
+### Сущности
+
+- [MessageSendRequest](#messagesendrequest)
+- [MessageHistoryGetRequest](#messagehistorygetrequest)
+- [FileGetRequest](#filegetrequest)
+- [GetQueuedChatRequest](#getqueuedchatrequest)
+- [ConnectionStatusChangeRequest](#connectionstatuschangerequest)
+- [ChatStatusChangeRequest](#chatstatuschangerequest)
+- [ChatRestoreRequest](#chatrestorerequest)
+- [ChatByIdJoinRequest](#chatbyidjoinrequest)
+- [IFrameGetRequest](#iframegetrequest)
+- [MessageSentEvent](#messagesentevent)
+- [MessageHistoryGotEvent](#messagehistorygotevent)
+- [IncomingMessageEvent](#incomingmessageevent)
+- [QueuedChatGotEvent](#queuedchatgotevent)
+- [ConnectionStatusChangedEvent](#connectionstatuschangedevent)
+- [ChatStatusChangedEvent](#chatstatuschangedevent)
+- [ChatRestoredEvent](#chatrestoredevent)
+- [ChatByIdJoinedEvent](#chatbyidjoinedevent)
+- [IFrameGotEvent](#iframegotevent)
+- [ErrorEvent](#errorevent)
+
+
+___
+#### MessageSendRequest
+
+Послать текст нового сообщения от оператору на сервер (и дальше пользователю).
+
+Сервер не должен посылать это сообщение (Сморите [MessageSentEvent](#messagesentevent) и [MessageHistoryGotEvent](#messagehistorygotevent)).
+
+Интерфейс оператора посылает это сообщение чтобы послать сообщение в тикет на который у него есть разрешение.
+
+```json
+{
+  // Идентификатор тикета.
+  "chatId": integer,
+  // Текст сообщение.
+  "message": String,
+}
+```
+
+___
+#### MessageHistoryGetRequest
+
+Запрос на историю сообщений для этого тикета от оператора. (Ответ: [MessageHistoryGotEvent](#messagehistorygotevent)).
+
+Интерфейс оператора посылает это сообщение чтобы запросить сообщения из определённой темы.
+
+```json
+{
+  // Идентификатор
+  "chatId": integer,
+  // Идентификатор последнего сообщения который уже есть.
+  "messageId": Option<integer>,
+  // Число сообщений которое надо достать.
+  "size": Option<integer>
+}
+```
+
+___
+#### FileGetRequest
+
+Достать файл для сообщения. Посылает оператор. НБ: ИНТЕРФЕЙС ПОКА НЕ РАБОТАЕТ.
+
+Интерфейс оператора посылает это сообщение чтобы запросить файл который закреплен к сообщению. 
+
+```json
+{
+  // Идентификатор сообщения к которому относится файл.
+  "messageId": integer
+}
+```
+
+___
+#### GetQueuedChatRequest
+
+Достать новый тикет из очереди. Посылает только оператор. (Ответ: [QueuedChatGotEvent](#queuedchatgotevent)).
+
+Интерфейс оператора посылает это сообщение чтобы получить доступную тему к обработке. Если нужна конкретная тема предпочитайте [ChatByIdJoinRequest](#chatbyidjoinrequest). Если нужно восстановить последнею тему, пользуйтесь [ChatRestoreRequest](#chatrestorerequest).
+
+```json
+{
+  // Тэги которые могут быть у тикета. (Пока не задействовано)
+  "tags": Array<String>
+}
+```
+
+___
+#### ChatRestoreRequest
+
+Восстановить тикет для оператора если он был. Посылает только оператор. (Ответ: [ChatRestoredEvent](#chatrestoredevent)).
+
+Интерфейс оператора посылает это сообщение чтобы восстановить последнею тему.
+
+```json
+{}
+```
+
+___
+#### ConnectionStatusChangeRequest
+
+Изменить статус соединения (пока не задействовано).
+
+```json
+{
+  // Статус соединения
+  "status": integer
+}
+```
+
+___
+#### ChatStatusChangeRequest
+
+Изменить статус тикета. Посылает оператор. (Статус: [ChatStatusChangedEvent](#chatstatuschangedevent))
+
+Интерфейс оператора посылает это сообщение чтобы изменить статус темы, на пример закрыть её или вернуть ЛЛМ-ке.
+
+Валидные статусы:
+
+- 0: В обработки (ЛЛМ)
+- 1: В обработки оператора
+- 2: Закрыто благополучно
+- 3: Закрыто без разрешения
+- 4: Закрыто после обработки оператора
+
+```json
+{
+  // Идентификатор тикета
+  "chatId": integer,
+  // Желаемый статус тикета
+  "status": integer
+}
+```
+
+___
+#### ChatByIdJoinRequest
+
+Запрос оператора присоединится к чату на который у оператора уже есть право. (Ответ: [ChatByIdJoinedEvent](#chatbyidjoinedevent)).
+
+Интерфейс оператора посылает это сообщение чтобы достать определённую тему из очереди. Обычно это должна быть уже начатая тема с которой оператор уже работал. Если нужно достать новую тему предпочитайте [GetQueuedChatRequest](#getqueuedchatrequest). Если нужно восстановить последнею тему предпочитайте [ChatRestoreRequest](#chatrestorerequest).
+
+```json
+{
+  // Идентификатор тикета
+  "chatId": integer
+}
+```
+
+___
+#### IFrameGetRequest
+
+Запрос от оператора на сервер, достать код ФЕ чата. Запрос должен быть первым, или одним из первых. (Ответ: [IFrameGotEvent](#iframegotevent))
+
+Интерфейс оператора посылает это сообщение чтобы достать код окна оператора. Этот запрос должен быть послан до того как оператор может начать работать, ибо иначе интерфейса нет, и работать не с чем! 
+
+```json
+{}
+```
+
+___
+#### MessageSentEvent
+
+Сообщение от сервера что подтверждает что сообщение послано операторам.
+
+Сервер посылает это сообщение оператору чтобы подтвердить что сообщение послано клиенту.
+
+```json
+{
+  // Идентификатор сообщения
+  "id": integer,
+  // Текст сообщения
+  "message": String,
+  // Имеет ли сообщения прикрепленные файлы
+  "hasFile": boolean,
+  // Пути файлов которые прикреплены к сообщения (не задействовано) 
+  "filePath": Array<String>,
+  // Время послания сообщения
+  "dateTime": [Year,Day,Hour,Minute,Second,NanoSecond]
+}
+```
+
+___
+#### MessageHistoryGotEvent
+
+Ответ на запрос [MessageHistoryGetRequest](#messagehistorygetrequest).
+
+Сервер посылает это сообщение оператору.
+
+```json
+{
+  // Идентификатор тикета
+  "chatId": integer,
+  // Массив сообщений.
+  "messages": [{
+  // Идентификатор сообщения
+    "id": integer,
+  // Текст сообщения
+    "message": String,
+  // Имеет ли сообщения прикрепленные файлы
+    "hasFile": boolean,
+  // Пути файлов которые прикреплены к сообщения (не задействовано) 
+    "filePath": Array<String>,
+  // Время послания сообщения
+    "dateTime": [Year,Day,Hour,Minute,Second,NanoSecond]
+  }]
+}
+```
+
+___
+#### IncomingMessageEvent
+
+Сообщение от сервера что пришло сообщение от клиента.
+
+Сервер посылает это сообщение оператору.
+
+```json
+{
+  // Идентификатор тикета
+  "chatId": integer,
+  // Идентификатор сообщения
+  "id": integer,
+  // Текст сообщения
+  "message": String,
+  // Имеет ли сообщения прикрепленные файлы
+  "hasFile": boolean,
+  // Пути файлов которые прикреплены к сообщения (не задействовано) 
+  "filePath": Array<String>,
+  // Время послания сообщения
+  "dateTime": [Year,Day,Hour,Minute,Second,NanoSecond]
+}
+```
+
+___
+#### QueuedChatGotEvent
+
+Ответ от сервера на запрос [GetQueuedChatRequest](#getqueuedchatrequest). Если нет свободных тем, то ChatId = null.
+
+Сервер посылает это сообщение оператору.
+
+```json
+{
+  // Идентификатор тикета
+  "chatId": Option<Integer>
+}
+```
+
+___
+#### ConnectionStatusChangedEvent
+
+Не задействовано.
+
+Сервер посылает это сообщение оператору.
+
+```json
+{
+  // Статус на который соединение переведено
+  "status": integer
+}
+```
+
+___
+#### ChatStatusChangedEvent
+
+Ответ от сервера на запрос [ChatStatusChangeRequest](#chatstatuschangerequest).
+
+Сервер посылает это сообщение оператору.
+
+```json
+{
+  // Идентификатор тикета
+  "chatId": integer,
+  // Статус на который переведен тикет
+  "status": integer
+}
+```
+
+___
+#### ChatRestoredEvent
+
+Ответ от сервера на запрос [ChatRestoreRequest](#chatrestorerequest).
+
+Сервер посылает это сообщение оператору.
+
+```json
+{
+  // Идентификатор тикета
+  "chatId": Option<integer>
+}
+```
+
+___
+#### ChatByIdJoinedEvent
+
+Ответ от сервера на [ChatByIdJoinedEvent](#chatbyidjoinedevent).
+
+Сервер посылает это сообщение оператору.
+
+```json
+{
+  // Идентификатор тикета
+  "chatId": integer,
+  //Статус тикета
+  "status": integer
+}
+```
+
+___
+#### IFrameGotEvent
+
+Ответ от сервера на [IFrameGotEvent](#iframegotevent). Содержит код "окошка" оператора.
+
+Сервер посылает это сообщение оператору.
+
+```json
+{
+  // Код для отправки на ФЕ оператора
+  "code": String
+}
+```
+
+___
+#### ErrorEvent
+
+Сообщения от любой стороны об ошибки. Обычно посылается сервером.
+
+И сервер, и интерфейс оператора может посылать это сообщение.
+
+```json
+{ // Текст ошибки
+  "error_text": String
+}
+```
+

@@ -15,14 +15,20 @@ edition = "2024"
 rust-version = "1.95.0"
 
 [workspace.dependencies]
+actix-http = { version = "3.13" }
 actix-web = { version = "4.14" }
+actix-ws = { version = "0.4.0" }
 ahash = { version = "*" }
 base64 = { version = "*" }
+bytes = { version = "*" }
+bytestring = { version = "*" }
 futures = { version = "*" }
+futures-util = { version = "*" }
 josekit = { version = "*" }
 proc-macro2 = { version = "*" }
 quote = { version = "1.0" }
 reqwest = { version = "*", features = ["stream", "json", "form"] }
+reqwest-websocket = { version = "*", features = ["json"] }
 sqlx = { version = "*", features = [
     "postgres",
     "runtime-tokio",
@@ -51,6 +57,7 @@ tracing-subscriber = { version = "*", features = [
     "json",
     "registry",
 ] } # "0.3.23"
+uuid = { version = "*", features = ["v7"] }
 
 
 [profile.release]

@@ -44,8 +44,18 @@ impl CoreError {
             LlmError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Http(h) => h.status_code(),
+            WSClose(_) | WSCloseError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            ParseJson(_)
+            | WsBytesTooShort(_)
+            | WsAttachmentTooShort(_)
+            | InvalidWsBinItemKind(_) => StatusCode::BAD_REQUEST,
+            TryFromSlice(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Parse(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            QueueError => StatusCode::INTERNAL_SERVER_ERROR,
+            QueueError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            TicketInUse(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            TokioError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            ActixError(_, c) => *c,
+            WsHandShakeError(e) => e.status_code(),
             NoAccess(_, _) | UzorPlugin(_) => StatusCode::FORBIDDEN,
         }
     }

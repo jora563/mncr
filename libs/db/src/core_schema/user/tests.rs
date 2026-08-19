@@ -5,7 +5,7 @@ use crate::error::DbError;
 
 #[tokio::test]
 async fn test_user_crud() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -45,7 +45,7 @@ async fn test_user_crud() {
 
 #[tokio::test]
 async fn test_user_account_crud() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -93,7 +93,7 @@ async fn test_user_account_crud() {
 
 #[tokio::test]
 async fn test_user_full_account() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",

@@ -4,11 +4,13 @@
 //! или выполнить иные взаимодействия.
 use crate::context::CoreCtx;
 use crate::error::Result;
+use crate::llm::LlmReply;
 use crate::messengers::ChatMessages;
 use crate::poll_based::db_ops::ValidationOutcome;
 
 use chat::models::{ReplyMarkup, TelegramKeyboard};
-use db::core_schema::{ApiId, CoreDbCrud, DbBotAccountWithMeta};
+use db::core_schema::{ApiId, CoreDbCrud, DbBotAccountWithMeta, DbTicketCloseStatus};
+use llm_client::llm;
 use std::sync::Arc;
 use tokio::task as tt;
 
@@ -245,16 +247,39 @@ async fn process_regular_message(
     }
 
     // Послать разговор в LLM и дождаться ответа.
-    let full_ticket = data.ticket.clone().get_msgs(ctx.db().get()).await?;
+    let mut full_ticket = data.ticket.clone().get_msgs(ctx.db().get()).await?;
     tracing::info!("Validation complete for chat: {:?}", full_ticket.ticket);
     tracing::trace!("Got ticket: {full_ticket:?}");
+
+    // Если у нас тикет на статусе работы с оператором, то мы всё пересылаем оператору, иначе
+    // мы отсылаем всё это дело боту.
+    let close_status = data.ticket.close_status;
+    if matches!(close_status, DbTicketCloseStatus::EscalationOngoing) {
+        let ws_chats = ctx.ws_chats();
+        for message in full_ticket.messages.into_iter() {
+            ws_chats
+                .try_send(full_ticket.ticket.pkey(), message)
+                .await?;
+        }
+        return Ok(());
+    };
 
     let llm_reply = ctx
         .llm()
         .query_llm_with_ticket(&full_ticket, conjoined, chat_msgs.len())
         .await?;
 
-    // Сохранить ответ в БД.
+    // Если анализ показывает что надо эскалировать, передаём данные чата в очередь
+    // что дает очереди доступ к его данным.
+    // ТОDO: A more thorough work-over of the ticket status.
+    if escalation_required(&llm_reply) {
+        full_ticket.ticket.close_status = DbTicketCloseStatus::EscalationOngoing;
+        ctx.queue()
+            .insert_ticket(&full_ticket.ticket, &meta.project.project_name, 0)
+            .await?;
+    }
+
+    // сохранить ответ в БД.
     let next_message = llm_reply.extract_answer();
     tracing::warn!("Message from LLM: {next_message}");
 
@@ -265,6 +290,11 @@ async fn process_regular_message(
     ctx.chat()
         .send_messages(meta, &data.chat, msg, chat_msgs)
         .await
+}
+
+/// Эта функция анализирует ответ нейросетки, и решает, нужно ли эскалировать.
+fn escalation_required<T: llm::LlmRequest>(_llm_reply: &LlmReply<T>) -> bool {
+    false
 }
 
 mod db_ops;

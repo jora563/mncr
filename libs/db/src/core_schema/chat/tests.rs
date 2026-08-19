@@ -7,7 +7,7 @@ use crate::error::DbError;
 
 #[tokio::test]
 async fn test_validate_chat() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
             "tests/sql/postgres/",
             "../../sql/core/",
             "tests/sql/postgres/drop_core",
@@ -118,7 +118,7 @@ async fn test_validate_chat() {
 
 #[tokio::test]
 async fn test_chat_crud() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -202,7 +202,7 @@ async fn test_chat_crud() {
 
 #[tokio::test]
 async fn test_full_chat() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "../../sql/core/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -385,7 +385,7 @@ async fn test_full_chat() {
 
 #[tokio::test]
 async fn test_message_validate() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
             "tests/sql/postgres/",
             "../../sql/core/",
             "tests/sql/postgres/drop_core",
@@ -592,7 +592,7 @@ async fn test_message_validate() {
 
 #[tokio::test]
 async fn test_message_crud() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
             "tests/sql/postgres/",
             "../../sql/core/",
             "tests/sql/postgres/drop_core",
@@ -686,7 +686,7 @@ async fn test_message_crud() {
 
 #[tokio::test]
 async fn test_full_message_single_and_many() {
-    crate::test_frame::run_test_postgres::<TestCfg, _>(
+    crate::test_frame::run_test_postgres::<TestCfg, _, ()>(
         "tests/sql/postgres/",
         "../../sql/core/",
         "tests/sql/postgres/drop_core",
@@ -781,6 +781,7 @@ async fn test_full_message_single_and_many() {
 
                 let msgs_t = DbFullMessage::get_for_ticket(ticket.pkey(), &pool).await.unwrap();
                 let msgs_ch = DbFullMessage::get_for_chat(chat.pkey(), &pool).await.unwrap();
+                let msgs_his1 = DbFullMessage::get_history(chat.pkey(), Some(2), Some(1), &pool).await.unwrap();
 
                 assert_eq!(msgs_t, msgs_ch);
 
@@ -790,6 +791,11 @@ async fn test_full_message_single_and_many() {
                 assert_eq!(msgs_t[1], full_msg2);
                 assert_eq!(msgs_t[2], full_msg3);
                 assert_eq!(msgs_t[3], full_msg4);
+
+                assert_eq!(msgs_his1.len(), 1);
+                assert_eq!(msgs_his1[0].message.pkey(), 3);
+                assert_eq!(&msgs_his1[0].message.external_id, "PWRR-001/M-0972");
+                assert_eq!(msgs_his1[0].files.len(), 4);
 
             Ok(())
         },

@@ -3,3 +3,29 @@ name = "queue"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
+
+
+[dependencies]
+db = { path = "../db" }
+
+serde.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+time.workspace = true
+toml.workspace = true
+tokio = { workspace = true, features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+] }
+tracing.workspace = true
+
+[dev-dependencies]
+futures-util.workspace = true
+
+[features]
+default = ["intrinsic"]
+intrinsic = []
+worker = []
+stand-alone = []
