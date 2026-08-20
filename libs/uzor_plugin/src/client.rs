@@ -103,7 +103,7 @@ pub trait PermissionReExtract: for<'de> Deserialize<'de> {
 
     /// Получить данные токена из хедера.
     fn decode(header: &str) -> Result<Self> {
-        let decoded_data = BASE64_STANDARD.decode(header)?;
+        let decoded_data = BASE64_URL_SAFE.decode(header)?;
         let data = serde_json::from_slice(&decoded_data)?;
 
         Ok(data)
@@ -168,6 +168,7 @@ pub(crate) async fn check_token_via_keycloak_server(
     if let Some(err) = result.error {
         Err(UzorPluginError::KeycloakGeneral(err))
     } else if result.active {
+        tracing::info!("Token: {token}");
         parse_token(token)
     } else {
         Err(UzorPluginError::KeycloakTokenExpired)
@@ -189,7 +190,7 @@ pub(crate) fn check_token_via_sha512(
     let token = token.to_str()?.replace("Bearer ", "");
     let (header, data) = get_parts(&token)?;
 
-    let decoded_header = BASE64_STANDARD.decode(header)?;
+    let decoded_header = BASE64_URL_SAFE.decode(header)?;
     let header: TokenHeader = serde_json::from_slice(&decoded_header)?;
 
     // Проверь ччто хедер правильного типа.
@@ -212,7 +213,7 @@ pub(crate) fn check_token_via_sha512(
         x => return Err(UzorPluginError::KeycloakUnsupportedSign(x.to_string())),
     };
 
-    let decoded_data = BASE64_STANDARD.decode(data)?;
+    let decoded_data = BASE64_URL_SAFE.decode(data)?;
     let data = serde_json::from_slice(&decoded_data)?;
     Ok(data)
 }
@@ -243,7 +244,7 @@ pub(crate) fn get_parts(token: &str) -> Result<(String, String)> {
 pub(crate) fn parse_token(token: String) -> Result<TokenData> {
     let (_, data) = get_parts(&token)?;
 
-    let decoded_data = BASE64_STANDARD.decode(data)?;
+    let decoded_data = BASE64_URL_SAFE.decode(data)?;
     let data = serde_json::from_slice(&decoded_data)?;
 
     Ok(data)
@@ -273,10 +274,10 @@ pub(crate) fn fill_request(
     data: AsaaData,
 ) -> Result<()> {
     let projects = serde_json::to_string(&data)?;
-    let encoded_projects = BASE64_STANDARD.encode(&projects);
+    let encoded_projects = BASE64_URL_SAFE.encode(&projects);
 
     let token = serde_json::to_string(&token)?;
-    let encoded_token_data = BASE64_STANDARD.encode(&token);
+    let encoded_token_data = BASE64_URL_SAFE.encode(&token);
 
     let thn = HeaderName::from_static("core-token-data");
     let phn = HeaderName::from_static("core-permitted-projects");
@@ -288,4 +289,28 @@ pub(crate) fn fill_request(
     req.headers_mut().insert(phn, pvn);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parse_token_test() {
+        let x = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJJVEZ6YjBfbF9BeW5GM0hyWkhIYzZy\
+RDJ4NmdtaTJwdGFSc3BiNFd4TTM0In0.eyJleHAiOjE3ODcxNDYyODUsImlhdCI6MTc4NzE0NTk4NSwiYXV0aF90aW1lIjoxNzg3MTQ1OTg0LCJqdGkiOiJhYjgyM2RlMi00MjY0LTRhNmMtYTg1My02NTdkZWQ3OTNlZDciLCJpc3MiOiJo\
+dHRwOi8vbG9jYWxob3N0Ojk5OTkvcmVhbG1zL3J1Iiwic3ViIjoiYzg3NmEyODUtNmJkOS00ZWY1LTg1NmMtZDg3MjkyYjkwOWI2IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoiYXBwLTEiLCJzZXNzaW9uX3N0YXRlIjoiYjg4OGVmMDYtYjVl\
+YS00ZjhlLWI3YWQtMjdkNjUwOTA1MjAzIiwiYWNyIjoiMSIsImFsbG93ZWQtb3JpZ2lucyI6WyJodHRwOi8vbG9jYWxob3N0OjUxNzMiXSwic2NvcGUiOiJvcGVuaWQgcHJvZmlsZSBlbWFpbCIsInNpZCI6ImI4ODhlZjA2LWI1ZWEtNGY4\
+ZS1iN2FkLTI3ZDY1MDkwNTIwMyIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoi0JjQu9GM0Y8g0JvRg9Cz0L7QstC-0LkiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJpLmx1Z292b3kiLCJnaXZlbl9uYW1lIjoi0JjQu9GM0Y8iLCJm\
+YW1pbHlfbmFtZSI6ItCb0YPQs9C-0LLQvtC5IiwiZW1haWwiOiJpLmx1Z292b3lAdGVsZWNvbnRhY3QucnUifQ.TP1FjeQeCn0Oc9zS1LCv7zxNH84-rAjLUj5izb8vWoITqBJ319LK9OYursQhHS4n6Il5vEEyAOYXqLxD7CmGCcVLcly3a\
+Wqm7ham_kuiHm4A5YR6eIKO6HsMgHzRGJgNkj95ZTsSp7xs5C6k7UJeNkeqlIOzPPWBVvNNV8NomwGtfENs-FOr684g-TqSYH7eRrrasFCox0w_xgvAmUeYyCCQu3SmV-H38NOqARtBQcOJhwyBNK1ECiBgYL7rZztvfGGaNvxtzBsDK9Z3t\
+MkWS_glCeahG4JRq3iPNI6Eppq97PE9LkRDJ8VaFUfayFIcRwkh50p1s5YooaBUj1inFw";
+        let r = parse_token(x.to_string());
+        assert!(r.is_err(), "{r:?}");
+        // The token is wrong but the base64 is right!
+        assert_eq!(
+            &r.unwrap_err().to_string(),
+            "JSON Deserialize error: missing field `personal_id` at line 1 column 580"
+        );
+    }
 }
