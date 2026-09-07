@@ -8,11 +8,11 @@ rust-version.workspace = true
 chat = { path = "../libs/chat" }
 db = { path = "../libs/db" }
 llm = { path = "../libs/llm" }
-llm-client = { path = "../libs/llm_client" }
 queue = { path = "../libs/queue" }
 uzor_plugin = { path = "../libs/uzor_plugin" }
 
 actix-http.workspace = true
+actix-multipart.workspace = true
 actix-web.workspace = true
 actix-ws.workspace = true
 ahash.workspace = true
@@ -35,6 +35,9 @@ tokio = { workspace = true, features = [
 tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true
+utoipa-actix-web.workspace = true
+utoipa.workspace = true
+utoipa-swagger-ui.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
@@ -46,3 +49,4 @@ uzor_plugin = { path = "../libs/uzor_plugin", features = ["mock_server"] }
 [features]
 external-keycloak = []
 external-asaa = []
+test-aiomni-llm = []

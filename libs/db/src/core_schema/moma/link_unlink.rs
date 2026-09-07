@@ -16,9 +16,9 @@ pub trait MoMa {
     const TABLE: &'static str;
 
     /// Link two many-to-many features.
-    async fn link<E>(a: &Self::TypeA, b: &Self::TypeB, ex: E) -> Result<()>
+    async fn link<'a, E>(a: &Self::TypeA, b: &Self::TypeB, ex: E) -> Result<()>
     where
-        E: for<'a> PgExecutor<'a>,
+        E: PgExecutor<'a>,
     {
         let query = format!(
             "INSERT INTO {link_table}({field_a}, {field_b}) VALUES($1, $2)",
@@ -35,9 +35,9 @@ pub trait MoMa {
     }
 
     /// Unlink two many_to_many features
-    async fn un_link<E>(a: &Self::TypeA, b: &Self::TypeB, ex: E) -> Result<()>
+    async fn un_link<'a, E>(a: &Self::TypeA, b: &Self::TypeB, ex: E) -> Result<()>
     where
-        E: for<'a> PgExecutor<'a>,
+        E: PgExecutor<'a>,
     {
         let query = format!(
             "DELETE FROM {link_table}

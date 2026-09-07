@@ -32,9 +32,9 @@ pub struct DbTicketChat;
 
 impl DbTicketChat {
     /// Достать все проекты связаны с данной платформой.
-    pub async fn get_for_chat<E>(chat_id: i64, ex: E) -> Result<Vec<DbTicket>>
+    pub async fn get_for_chat<'a, E>(chat_id: i64, ex: E) -> Result<Vec<DbTicket>>
     where
-        E: for<'a> PgExecutor<'a>,
+        E: PgExecutor<'a>,
     {
         sqlx::query_as::<_, DbTicket>(
             "SELECT * FROM query_ticket
@@ -48,9 +48,9 @@ impl DbTicketChat {
     }
 
     /// Достать все платформы связаны с данным проектом
-    pub async fn get_for_ticket<E>(ticket_id: i64, ex: E) -> Result<Vec<DbChat>>
+    pub async fn get_for_ticket<'a, E>(ticket_id: i64, ex: E) -> Result<Vec<DbChat>>
     where
-        E: for<'a> PgExecutor<'a>,
+        E: PgExecutor<'a>,
     {
         sqlx::query_as::<_, DbChat>(
             "SELECT * FROM messenger_chat
@@ -66,9 +66,9 @@ impl DbTicketChat {
 
 impl DbUserAccountProject {
     /// Достать все проекты связаны с данной платформой.
-    pub async fn get_for_account<E>(account_id: i64, ex: E) -> Result<Vec<DbProject>>
+    pub async fn get_for_account<'a, E>(account_id: i64, ex: E) -> Result<Vec<DbProject>>
     where
-        E: for<'a> PgExecutor<'a>,
+        E: PgExecutor<'a>,
     {
         sqlx::query_as::<_, DbProject>(
             "SELECT * FROM project
@@ -82,9 +82,9 @@ impl DbUserAccountProject {
     }
 
     /// Достать все платформы связаны с данным проектом
-    pub async fn get_for_project<E>(project_id: i64, ex: E) -> Result<Vec<DbUserAccount>>
+    pub async fn get_for_project<'a, E>(project_id: i64, ex: E) -> Result<Vec<DbUserAccount>>
     where
-        E: for<'a> PgExecutor<'a>,
+        E: PgExecutor<'a>,
     {
         sqlx::query_as::<_, DbUserAccount>(
             "SELECT * FROM user_account
@@ -100,9 +100,9 @@ impl DbUserAccountProject {
 
 impl DbProjectUser {
     /// Достать все проекты связаны с данной платформой.
-    pub async fn get_for_user<E>(user_id: i64, ex: E) -> Result<Vec<DbProject>>
+    pub async fn get_for_user<'a, E>(user_id: i64, ex: E) -> Result<Vec<DbProject>>
     where
-        E: for<'a> PgExecutor<'a>,
+        E: PgExecutor<'a>,
     {
         sqlx::query_as::<_, DbProject>(
             "SELECT * FROM project
@@ -116,9 +116,9 @@ impl DbProjectUser {
     }
 
     /// Достать все платформы связаны с данным проектом
-    pub async fn get_for_project<E>(project_id: i64, ex: E) -> Result<Vec<DbUser>>
+    pub async fn get_for_project<'a, E>(project_id: i64, ex: E) -> Result<Vec<DbUser>>
     where
-        E: for<'a> PgExecutor<'a>,
+        E: PgExecutor<'a>,
     {
         sqlx::query_as::<_, DbUser>(
             "SELECT * FROM \"user\"
@@ -134,9 +134,9 @@ impl DbProjectUser {
 
 impl DbProjectPlatform {
     /// Достать все проекты связаны с данной платформой.
-    pub async fn get_for_platform<E>(platform_id: i64, ex: E) -> Result<Vec<DbProject>>
+    pub async fn get_for_platform<'a, E>(platform_id: i64, ex: E) -> Result<Vec<DbProject>>
     where
-        E: for<'a> PgExecutor<'a>,
+        E: PgExecutor<'a>,
     {
         sqlx::query_as::<_, DbProject>(
             "SELECT * FROM project
@@ -150,9 +150,9 @@ impl DbProjectPlatform {
     }
 
     /// Достать все платформы связаны с данным проектом
-    pub async fn get_for_project<E>(project_id: i64, ex: E) -> Result<Vec<DbPlatform>>
+    pub async fn get_for_project<'a, E>(project_id: i64, ex: E) -> Result<Vec<DbPlatform>>
     where
-        E: for<'a> PgExecutor<'a>,
+        E: PgExecutor<'a>,
     {
         sqlx::query_as::<_, DbPlatform>(
             "SELECT * FROM platform

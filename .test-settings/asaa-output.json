@@ -1,0 +1,47 @@
+{
+    "statusCode": 200,
+    "status": "Success",
+    "projects": [
+        {
+            "clientDigitalCode": 1009,
+            "name": "Телеконтакт Ресепшн"
+        },
+        {
+            "clientDigitalCode": 45,
+            "name": "Горячие линии"
+        },
+        {
+            "clientDigitalCode": 8088,
+            "name": "ТК, все страны, Техническая служба"
+        }
+    ],
+    "themes": [
+        "781993",
+        "781999"
+    ],
+    "pins": [],
+    "skillgroups": [
+        "SG_test_aaa_sso_de",
+        "SG_itms_general_de",
+        "SG_itms_general_de",
+        "SG_itms_general_de",
+        "SG_itms_general_de",
+        "SG_kvint_bankiru_kasko_de"
+    ],
+    "calltypes": [
+        "CT_itms_vuse_de",
+        "CT_itms_vuse_busy",
+        "CT_itms_vuse_de",
+        "CT_itms_vuse_busy"
+    ],
+    "campaigns": [
+        "PMI_rus_0524_predictive",
+        "Bankiru_marketplace_662_predictive",
+        "TestDrive_clients_Predictive",
+        "bankiru-mia-test_predictive",
+        "BankiRu_VTB_FU_predictive",
+        "Bankiru_eIPOTSTRAH_predictive",
+        "Bankiru_marketplacePM_predictive_de"
+    ],
+    "isAdvanced": "0"
+}

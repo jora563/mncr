@@ -16,6 +16,7 @@ rust-version = "1.95.0"
 
 [workspace.dependencies]
 actix-http = { version = "3.13" }
+actix-multipart = { version = "*" }
 actix-web = { version = "4.14" }
 actix-ws = { version = "0.4.0" }
 ahash = { version = "*" }
@@ -27,7 +28,7 @@ futures-util = { version = "*" }
 josekit = { version = "*" }
 proc-macro2 = { version = "*" }
 quote = { version = "1.0" }
-reqwest = { version = "*", features = ["stream", "json", "form"] }
+reqwest = { version = "*", features = ["stream", "multipart", "json", "form"] }
 reqwest-websocket = { version = "*", features = ["json"] }
 sqlx = { version = "*", features = [
     "postgres",
@@ -57,6 +58,13 @@ tracing-subscriber = { version = "*", features = [
     "json",
     "registry",
 ] } # "0.3.23"
+utoipa-actix-web = { version = "*" }
+utoipa = { version = "*", features = ["actix_extras"] }
+utoipa-swagger-ui = { version = "*", features = [
+    "actix-web",
+    "debug-embed",
+    "vendored",
+] }
 uuid = { version = "*", features = ["v7"] }
 
 

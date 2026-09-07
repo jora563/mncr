@@ -10,7 +10,6 @@ use crate::poll_based::db_ops::ValidationOutcome;
 
 use chat::models::{ReplyMarkup, TelegramKeyboard};
 use db::core_schema::{ApiId, CoreDbCrud, DbBotAccountWithMeta, DbTicketCloseStatus};
-use llm_client::llm;
 use std::sync::Arc;
 use tokio::task as tt;
 
@@ -293,8 +292,8 @@ async fn process_regular_message(
 }
 
 /// Эта функция анализирует ответ нейросетки, и решает, нужно ли эскалировать.
-fn escalation_required<T: llm::LlmRequest>(_llm_reply: &LlmReply<T>) -> bool {
-    false
+fn escalation_required(llm_reply: &LlmReply) -> bool {
+    llm_reply.0.forward_to_operator
 }
 
 mod db_ops;

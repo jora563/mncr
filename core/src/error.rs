@@ -2,6 +2,7 @@
 //! Модуль ошибок. В основном обарачивает ошибки из внешних библиотек.
 use chat::error::ChatError;
 use db::core_schema::ApiId;
+use llm::error::LlmError;
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, CoreError>;
@@ -32,8 +33,8 @@ pub(crate) enum CoreError {
     Io(#[from] std::io::Error),
     #[error("Join error: {0}")]
     Join(#[from] tokio::task::JoinError),
-    #[error("Llm interface error")]
-    LlmError(llm_client::LlmError),
+    #[error("Llm interface error: {0}")]
+    LlmError(LlmError),
     #[error("Error initiating logger: {0}")]
     Log(#[from] tracing::dispatcher::SetGlobalDefaultError),
     #[error("No Access: No access for {0} \"{1}\".")]
@@ -46,6 +47,8 @@ pub(crate) enum CoreError {
     ParseJson(#[from] serde_json::Error),
     #[error("Queue interface error: {0}")]
     QueueError(#[from] queue::error::QueueError),
+    #[error("Error in Database: {0}")]
+    RawSql(#[from] sqlx::Error),
     #[error("Ticket {0} already in use by operator.")]
     TicketInUse(i64),
     #[error("Internal communication error: {0}")]
@@ -81,8 +84,8 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for CoreError {
     }
 }
 
-impl From<llm_client::LlmError> for CoreError {
-    fn from(e: llm_client::LlmError) -> Self {
+impl From<LlmError> for CoreError {
+    fn from(e: LlmError) -> Self {
         Self::LlmError(e)
     }
 }

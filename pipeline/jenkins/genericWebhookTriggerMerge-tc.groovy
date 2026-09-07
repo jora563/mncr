@@ -308,7 +308,7 @@ pipeline {
                         // and should be set to deny, to prevent warnings from accumulating.
                         shWithErr('''
                             cd aiomni-core
-                            cargo clippy --all-targets -- -Dwarnings'''
+                            cargo clippy --all-targets --all-features -- -Dwarnings'''
                         )
                     } catch (Exception e) {
                         sendError("Lint error", e.toString())

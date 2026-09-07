@@ -8,7 +8,17 @@ use crate::core_schema::CoreDbCrud;
 use crate::error::{DbError, Result};
 
 /// Сущность проекта
-#[derive(Clone, CoreDbCrud, Debug, FromRow, PartialEq, Deserialize, Serialize)]
+#[derive(
+    Clone,
+    CoreDbCrud,
+    Debug,
+    FromRow,
+    PartialEq,
+    Deserialize,
+    Serialize,
+    utoipa::ToSchema,
+    utoipa::ToResponse,
+)]
 #[core_db_table = "project"]
 pub struct DbProject {
     #[core_db_skip_insert]
@@ -19,7 +29,9 @@ pub struct DbProject {
     pub external_id: String,
     /// Наименование проекта
     pub project_name: String,
+    #[schema(ignore)]
     pub created_on: PrimitiveDateTime,
+    #[schema(ignore)]
     pub altered_on: Option<PrimitiveDateTime>,
     pub altered_by: String,
 }
@@ -116,7 +128,17 @@ impl DbProject {
 }
 
 /// Сущность группы к которой принадлежит проект
-#[derive(Clone, CoreDbCrud, Debug, Deserialize, FromRow, PartialEq, Serialize)]
+#[derive(
+    Clone,
+    CoreDbCrud,
+    Debug,
+    Deserialize,
+    FromRow,
+    PartialEq,
+    Serialize,
+    utoipa::ToSchema,
+    utoipa::ToResponse,
+)]
 #[core_db_table = "project_group"]
 pub struct DbProjectGroup {
     #[core_db_skip_insert]
@@ -124,7 +146,9 @@ pub struct DbProjectGroup {
     /// Наименование группы
     pub group_name: String,
     #[core_db_skip_insert]
+    #[schema(ignore)]
     pub created_on: PrimitiveDateTime,
+    #[schema(ignore)]
     pub altered_on: Option<PrimitiveDateTime>,
 }
 
@@ -167,7 +191,7 @@ impl DbProjectGroup {
 }
 
 /// Сущность группы со всеми её проектами.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, utoipa::ToSchema, utoipa::ToResponse)]
 pub struct DbFullProjectGroup {
     pub group: DbProjectGroup,
     pub projects: Vec<DbProject>,

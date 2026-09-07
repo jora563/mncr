@@ -49,11 +49,8 @@ impl CoreError {
             | WsBytesTooShort(_)
             | WsAttachmentTooShort(_)
             | InvalidWsBinItemKind(_) => StatusCode::BAD_REQUEST,
-            TryFromSlice(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Parse(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            QueueError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            TicketInUse(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            TokioError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            TryFromSlice(_) | Parse(_) | QueueError(_) | RawSql(_) | TicketInUse(_)
+            | TokioError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             ActixError(_, c) => *c,
             WsHandShakeError(e) => e.status_code(),
             NoAccess(_, _) | UzorPlugin(_) => StatusCode::FORBIDDEN,

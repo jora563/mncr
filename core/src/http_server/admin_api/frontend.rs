@@ -7,6 +7,11 @@ use actix_web::web::{Bytes, Data};
 use actix_web::{HttpResponseBuilder, Responder, get};
 use std::sync::Arc;
 
+/// Достать страницы АПИ администратора.
+#[utoipa::path(
+    params(("Authorization" = String, Header, description = "Bearer + JWT token")),
+    responses((status = 200, body = Vec<Vec<u8>>))
+)]
 #[get("/frontend")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn get_frontend(data: Data<Arc<CoreCtx>>) -> impl Responder {

@@ -14,6 +14,11 @@ use std::ops::Deref;
 use std::sync::Arc;
 use uzor_plugin::{AsaaData, PermissionReExtract};
 
+/// Достать все боты по идентификатору их проекта. Боты приходят с полными метаданными.
+#[utoipa::path(
+    params(("Authorization" = String, Header, description = "Bearer + JWT token")),
+    responses((status = 200, body = Vec<DbBotAccountWithMeta>))
+)]
 #[get("/project/{project_id}/bots")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn get_bots_for_project(
@@ -27,6 +32,11 @@ pub(super) async fn get_bots_for_project(
         .into_response()
 }
 
+/// Удалить бот по его идентификатору.
+#[utoipa::path(
+    params(("Authorization" = String, Header, description = "Bearer + JWT token")),
+    responses((status = 200, body = String))
+)]
 #[delete("/bot/{bot_id}")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn delete_bot(
@@ -40,6 +50,11 @@ pub(super) async fn delete_bot(
         .into_response_with_code(StatusCode::OK)
 }
 
+/// Достать учётную запись бота по его идентификатору.
+#[utoipa::path(
+    params(("Authorization" = String, Header, description = "Bearer + JWT token")),
+    responses((status = 200, body = DbBotAccount))
+)]
 #[get("/bot/{bot_id}")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn get_bot(
@@ -51,6 +66,11 @@ pub(super) async fn get_bot(
     get_bot_inner(req, bot_id, data).await.into_response()
 }
 
+/// Добавить новую учётную запись бота.
+#[utoipa::path(
+    params(("Authorization" = String, Header, description = "Bearer + JWT token")),
+    responses((status = 200, body = DbBotAccount))
+)]
 #[post("/bot")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn post_new_bot_account(
@@ -64,6 +84,11 @@ pub(super) async fn post_new_bot_account(
         .into_response_with_code(StatusCode::CREATED)
 }
 
+/// Обновить учётную запись бота.
+#[utoipa::path(
+    params(("Authorization" = String, Header, description = "Bearer + JWT token")),
+    responses((status = 200, body = String))
+)]
 #[put("/bot")]
 pub(super) async fn post_update_bot_account(
     req: HttpRequest,
@@ -171,7 +196,7 @@ async fn post_new_bot_account_inner(
         .map_err(Into::into)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 pub(crate) struct IncomingNewBotAccount {

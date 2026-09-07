@@ -13,6 +13,13 @@ use std::sync::Arc;
 use std::time::Duration;
 use ws_protocol::*;
 
+/// WS API для оператора вызывается одним методом.
+///
+/// После первоначального вызова и перехода на WS протокол, сообщения передаются по созданному каналу.
+#[utoipa::path(
+    params(("Authorization" = String, Header, description = "Bearer + JWT token")),
+    responses((status = 101, body = String))
+)]
 #[get("/chat")]
 pub(crate) async fn chat(req: HttpRequest, body: Payload) -> impl Responder {
     match inner_websocket_chat(req, body).await {

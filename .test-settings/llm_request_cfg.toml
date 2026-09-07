@@ -1,0 +1,5 @@
+# model = "falcon3-10b-instruct-abliterated"
+model = "\"llama-3.2-sun-2.5b-chat\""
+prompts = []
+max_tokens = 10_000
+temperature = 0.8

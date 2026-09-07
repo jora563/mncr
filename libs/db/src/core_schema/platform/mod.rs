@@ -7,7 +7,17 @@ use sqlx::{FromRow, PgExecutor, PgPool};
 use crate::core_schema::CoreDbCrud;
 use crate::error::Result;
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, sqlx::Type, Serialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    PartialEq,
+    sqlx::Type,
+    Serialize,
+    utoipa::ToSchema,
+    utoipa::ToResponse,
+)]
 #[repr(i16)]
 #[sqlx(type_name = "SMALLINT")]
 pub enum ApiId {
@@ -25,7 +35,17 @@ impl std::fmt::Display for ApiId {
 }
 
 /// Платформа, или её инстанция.
-#[derive(Clone, CoreDbCrud, Debug, Deserialize, FromRow, PartialEq, Serialize)]
+#[derive(
+    Clone,
+    CoreDbCrud,
+    Debug,
+    Deserialize,
+    FromRow,
+    PartialEq,
+    Serialize,
+    utoipa::ToSchema,
+    utoipa::ToResponse,
+)]
 #[core_db_table = "platform"]
 pub struct DbPlatform {
     #[core_db_skip_insert]
@@ -34,7 +54,9 @@ pub struct DbPlatform {
     /// Наименование платформы.
     pub name: String,
     #[core_db_skip_insert]
+    #[schema(ignore)]
     pub created_on: PrimitiveDateTime,
+    #[schema(ignore)]
     pub altered_on: Option<PrimitiveDateTime>,
 }
 
@@ -100,7 +122,17 @@ impl DbPlatform {
 }
 
 /// Адреса платформы
-#[derive(Clone, CoreDbCrud, Debug, Deserialize, FromRow, PartialEq, Serialize)]
+#[derive(
+    Clone,
+    CoreDbCrud,
+    Debug,
+    Deserialize,
+    FromRow,
+    PartialEq,
+    Serialize,
+    utoipa::ToSchema,
+    utoipa::ToResponse,
+)]
 #[core_db_table = "platform_mirror"]
 pub struct DbPlatformMirror {
     #[core_db_id]
@@ -160,7 +192,7 @@ impl DbPlatformMirror {
 }
 
 /// Платформа с адресами
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, utoipa::ToSchema, utoipa::ToResponse)]
 pub struct DbFullPlatform {
     /// Платформа
     pub platform: DbPlatform,

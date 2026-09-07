@@ -160,6 +160,7 @@ async fn vk_callback_inner(ctx: Arc<CoreCtx>, query: VkCallbackQuery) -> Result<
 }
 
 /// HTTP-эндпоинт для обработки callback-запроса от VK OAuth.
+#[utoipa::path(responses((status = 200, body = String)))]
 #[get("/vk/callback")]
 pub async fn vk_callback(
     data: web::Data<Arc<CoreCtx>>,

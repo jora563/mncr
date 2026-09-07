@@ -24,7 +24,7 @@ pub(crate) struct CoreCtx {
     /// Сущьность взаимодействия с чатами
     chat: ChatDriver,
     /// Сущность взаимодействия с LLM
-    llm: LlmDriver<llm_client::openai::OpenAiRequest>,
+    llm: LlmDriver,
     /// Карта соединений с операторами, для того чтобы отправлять им сообщения.
     ws_chats: ws_chats::WsChats,
     /// Сущность взаимодействия с очередью
@@ -56,7 +56,7 @@ impl CoreCtx {
     pub(crate) fn chat(&self) -> &ChatDriver {
         &self.chat
     }
-    pub(crate) fn llm(&self) -> &LlmDriver<llm_client::openai::OpenAiRequest> {
+    pub(crate) fn llm(&self) -> &LlmDriver {
         &self.llm
     }
     pub(crate) fn queue(&self) -> &Queue {

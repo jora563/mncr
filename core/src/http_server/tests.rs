@@ -62,6 +62,22 @@ impl ConfigDriver for ServerTestDriverOperator {
     }
 }
 
+#[cfg(feature = "test-aiomni-llm")]
+struct ServerTestDriverLlm;
+
+#[cfg(feature = "test-aiomni-llm")]
+impl ConfigDriver for ServerTestDriverLlm {
+    fn initialise() -> Self {
+        Self
+    }
+    fn db_name_root(&self) -> Box<str> {
+        "ai_omni_server_llm_test_db".into()
+    }
+    fn db_host(&self) -> Box<str> {
+        "postgresql://aio_core:password@127.0.0.1:5432".into()
+    }
+}
+
 async fn query_keycloak_token(
     ctx: &CoreCtx,
     token: &str,
@@ -172,6 +188,21 @@ async fn test_server_admin_api() {
 
             // Если у нас внешний keycloak то мы у него запрашиваем токен.
             let admin_token = query_keycloak_token(&ctx, ADMIN_TOKEN, host, &client).await;
+
+            ///////////////////////////////////////////////////////////////////
+            // Preliminary cleanup for aiomni-llm. We use the direct interface since the
+            // project might not exist in our DB.
+            #[cfg(feature = "test-aiomni-llm")]
+            for i in 1..10 {
+                let response = client
+                    .delete(format!("http://{host}:8000/api/projects?project_id={i}"))
+                    .header(AUTH, &admin_token)
+                    .send()
+                    .await
+                    .unwrap();
+                examine_response(response).await;
+            }
+
             ///////////////////////////////////////////////////////////////////
             // Healthcheck
             let response = client
@@ -198,7 +229,7 @@ async fn test_server_admin_api() {
             ///////////////////////////////////////////////////////////////////
             // GET Project groups
             let response = client
-                .get(format!("http://{host}:8081/v1/admin_api/project_groups/"))
+                .get(format!("http://{host}:8081/v1/admin_api/project_groups"))
                 .header(AUTH, &admin_token)
                 .send()
                 .await
@@ -504,7 +535,6 @@ async fn test_server_admin_api() {
                 .await
                 .unwrap();
 
-
             let response = client
                 .delete(format!("http://{host}:8081/v1/admin_api/project/4"))
                 .header(AUTH, &admin_token)
@@ -578,6 +608,338 @@ async fn test_server_admin_api() {
 
 </html>"#);
 
+            service.abort();
+            mock_auth_services.abort();
+            Ok(())
+        },
+    )
+    .await
+}
+
+/// Используется для DRY.
+#[cfg(feature = "test-aiomni-llm")]
+async fn examine_response(response: reqwest::Response) -> StatusCode {
+    let status = response.status();
+    println!("{response:?}");
+    let text = response.text().await.unwrap_or_else(|e| e.to_string());
+    println!("CreateProjectrequest: {text:?}");
+    status
+}
+
+#[cfg(feature = "test-aiomni-llm")]
+#[tokio::test]
+async fn test_server_llm_engine_api() {
+    // Импорты уникальны для этой фичи
+    use llm::messages::*;
+    use reqwest::multipart::{Form, Part};
+
+    let mut config = Config::from_file("test/server-llm-test-config.toml").unwrap();
+
+    run_test_postgres::<ServerTestDriverLlm, _, ()>(
+        "../sql/core/",
+        "test/fixture/",
+        "test/cleanup/",
+        |_| async move {
+            // Jenkins docker in docker builds do not like the words "localhost"
+            let host = if std::env::var("AIOMNI_JENKINS_BUILD").is_ok() {
+                println!("Building on Jenkins... ");
+                config.auth_mut().set_asaa_home("http://127.0.0.1:9090");
+                config.auth_mut().set_keycloak_home("http://127.0.0.1:9090");
+                "127.0.0.1"
+            } else {
+                "localhost"
+            };
+
+            let ctx = Arc::new(CoreCtx::new(config).await.unwrap());
+            let ctx2 = ctx.clone();
+
+            let service = tokio::task::spawn(async move {
+                let _ = super::run_server(ctx2)
+                    .await
+                    .inspect_err(|e| println!("Server run error: {e}"));
+            });
+            // Wait for launch.
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+
+            println!("Host name: {host}");
+            let client = reqwest::Client::new();
+
+            let token = query_keycloak_token(&ctx, ADMIN_TOKEN, host, &client).await;
+            let mock_auth_services = mock_auth_service(&ctx);
+
+            // Preliminary cleanup
+            for i in 1..10 {
+                let response = client
+                    .delete(format!("http://{host}:8787/v1/admin_api/llm/project/{i}"))
+                    .header(AUTH, &token)
+                    .send()
+                    .await
+                    .unwrap();
+                examine_response(response).await;
+            }
+
+            println!("----Preliminary Deleted----");
+
+            ///////////////////////////////////////////////////////////////////
+            // POST projects
+            // See fixtures.
+            let request = CreateProjectRequest {
+                project_id: 1,
+                project_name: "Good Project I".into(),
+                system_prompt: Some("You're one of the good guys".into()),
+                fallback_message: Some("Remember, we're the good guys.".into()),
+            };
+            let response = client
+                .post(format!("http://{host}:8787/v1/admin_api/llm/projects"))
+                .header(AUTH, &token)
+                .json(&request)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK);
+
+            ///////////////////////////////////////////////////////////////////
+            // GET project by id
+            let response = client
+                .get(format!("http://{host}:8787/v1/admin_api/llm/project/1"))
+                .header(AUTH, &token)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK);
+
+            ///////////////////////////////////////////////////////////////////
+            // GET projects
+            let response = client
+                .get(format!("http://{host}:8787/v1/admin_api/llm/projects"))
+                .header(AUTH, &token)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK);
+
+            ///////////////////////////////////////////////////////////////////
+            // PUT projects (update)
+            let mut request = UpdateProjectRequest {
+                project_id: 1,
+                project_name: Some("Project Teapot".into()),
+                system_prompt: Some("You are an assistant who does their best to help.".into()),
+                fallback_message: None,
+            };
+            let response = client
+                .put(format!("http://{host}:8787/v1/admin_api/llm/projects"))
+                .header(AUTH, &token)
+                .json(&request)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::FORBIDDEN);
+
+            request.project_name = Some("Good Project I".into());
+            let response = client
+                .put(format!("http://{host}:8787/v1/admin_api/llm/projects"))
+                .header(AUTH, &token)
+                .json(&request)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK);
+
+            /////////////////////////////////////////////////////////////////
+            // GET training job by id
+            let response = client
+                .get(format!(
+                    "http://{host}:8787/v1/admin_api/llm/training/job/1"
+                ))
+                .header(AUTH, &token)
+                .send()
+                .await
+                .unwrap();
+            // let status = examine_response(response).await;
+            let status = response.status();
+            println!("{response:?}");
+            let err = response.text().await.unwrap();
+            assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+            assert_eq!(
+                &err,
+                "Llm interface error: Error from LLM: Training job 1 not found (code: JOB_NOT_FOUND)"
+            );
+
+            /////////////////////////////////////////////////////////////////
+            // POST a lora adaptor (this adaptor is invalid)
+            let file = b"I am a fake adaptor file".to_vec();
+            let form = Form::new()
+                    .text("project_id", "1")
+                    .part("file", Part::bytes(file));
+            let response = client
+                .post(format!(
+                    "http://{host}:8787/v1/admin_api/llm/projects/adaptor"
+                ))
+                .header(AUTH, &token)
+                .multipart(form)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK); // FOR NOW
+
+            // ТОДО: THIS TEST WILL NOT WORK UNTIL AIOMNI-LLM ITSELF IS FIXED.
+            ///////////////////////////////////////////////////////////////////
+            // POST QA in CSV format.
+            let form = Form::new()
+                    .text("project_id", "1")
+                    .text("column_question", "answer")
+                    .text("column_answer", "answer")
+                    .part("file", Part::file("../.test-settings/llm-examples/bank_kb.csv").await.unwrap());
+            let response = client
+                .post(format!(
+                    "http://{host}:8787/v1/admin_api/llm/projects/knowledge"
+                ))
+                .header(AUTH, &token)
+                .multipart(form)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK); // FOR NOW
+
+            ///////////////////////////////////////////////////////////////////
+            // POST dataset in JSONL format.
+            let form = Form::new()
+                    .text("project_id", "1")
+                    .part("file", Part::file("../.test-settings/llm-examples/bank_dataset.jsonl").await.unwrap());
+            let response = client
+                .post(format!(
+                    "http://{host}:8787/v1/admin_api/llm/projects/dataset?project_id=1"
+                ))
+                .header(AUTH, &token)
+                .multipart(form)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK); // FOR NOW
+
+            ///////////////////////////////////////////////////////////////////
+            // POST typical questions in a simple format.
+            let file = "Как заблокировать карту?\nКак восстановить пароль?\n".as_bytes();
+            let form = Form::new()
+                    .text("project_id", "1")
+                    .part("file", Part::bytes(file));
+            let response = client
+                .post(format!(
+                    "http://{host}:8787/v1/admin_api/llm/projects/questions"
+                ))
+                .header(AUTH, &token)
+                .multipart(form)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK); // FOR NOW
+
+            ///////////////////////////////////////////////////////////////////
+            // POST reload projects.
+            let mut body = HashMap::<String, serde_json::Value>::new();
+            body.insert("project_id".into(), 1.into());
+            let response = client
+                .post(format!(
+                    "http://{host}:8787/v1/admin_api/llm/projects/reload"
+                ))
+                .header(AUTH, &token)
+                .json(&body)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK); // FOR NOW
+
+            ///////////////////////////////////////////////////////////////////
+            // POST rebuild index.
+            let mut body = HashMap::<String, serde_json::Value>::new();
+            body.insert("project_id".into(), 1.into());
+            let response = client
+                .post(format!(
+                    "http://{host}:8787/v1/admin_api/llm/projects/build_index"
+                ))
+                .header(AUTH, &token)
+                .json(&body)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK); // FOR NOW
+
+            ///////////////////////////////////////////////////////////////////
+            // POST rebuild index.
+            let mut body = HashMap::<String, serde_json::Value>::new();
+            body.insert("project_id".into(), 1.into());
+            let response = client
+                .post(format!(
+                    "http://{host}:8787/v1/admin_api/llm/projects/build_index"
+                ))
+                .header(AUTH, &token)
+                .json(&body)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK); // FOR NOW
+
+
+            ///////////////////////////////////////////////////////////////////
+            // POST project train (probably should not be attempted in tests.)
+            let request = TrainingRequest {
+                project_id: 1,
+                epochs: None,
+                learning_rate: None,
+                batch_size: None,
+                lora_r: None,
+                lora_alpha: None,
+            };
+            let response = client
+                .post(format!(
+                    "http://{host}:8787/v1/admin_api/llm/projects/train"
+                ))
+                .header(AUTH, &token)
+                .json(&request)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK);
+
+
+            ///////////////////////////////////////////////////////////////////
+            // GET training jobs for project
+            let response = client
+                .get(format!(
+                    "http://{host}:8787/v1/admin_api/llm/training/jobs_by_project/1"
+                ))
+                .header(AUTH, &token)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK);
+
+            ///////////////////////////////////////////////////////////////////
+            // DELETE project by id
+            let response = client
+                .get(format!("http://{host}:8787/v1/admin_api/llm/project/1"))
+                .header(AUTH, &token)
+                .send()
+                .await
+                .unwrap();
+            let status = examine_response(response).await;
+            assert_eq!(status, StatusCode::OK);
+
+            // Закончить работу с сервисами.
             service.abort();
             mock_auth_services.abort();
             Ok(())

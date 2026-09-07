@@ -1,15 +1,15 @@
 [core]
 threads = 6
 blocking_threads = 2
-log_level = "info"
+log_level = "debug"
 record_logs = true
 log_dir = "target/tmp"
 server_port = 8081
-server_worker_count = 1
-server_max_blocking_threads = 1
+server_worker_count = 2
+server_max_blocking_threads = 2
 operator_idle_timeout_s = 300
 vk_redirect_uri = "https://localhost:8081/vk/callback"
-fe_dir = "../.test-settings/fe_dir"
+fe_dir = ".test-settings/fe_dir"
 
 [consul]
 consul_host = "http://user:password@test.ru:8500"
@@ -21,20 +21,21 @@ current_host = "http://test.ru:8081"
 apis = ["vk", "telegram"]
 
 [db]
-max_connections = 10
-min_connections = 2
+max_connections = 20
+min_connections = 4
 max_no_log_connections = 2
 acquire_timeout_s = 30
 max_lifetime_s = 3600
 idle_timeout_s = 60
 db_host_url = "localhost"
-db_name = "ai_omni_server_admin_test_db_0"
+db_name = "ai_omni_test_db_1"
 migrations_home = "sql/core/"
+fixtures_dir = "pipeline/fixtures/"
 user = "aio_core"
 pw = "password"
 
 [llm]
-host = "http://localhost:8000/"
+host = "http://localhost:8088/"
 chat_path = "/chat"
 
 [queue]
@@ -55,23 +56,13 @@ user = "aio_core"
 pw = "password"
 
 [auth]
-# asaa_home = "https://tc-asaa.telecontact.ru"
-asaa_home = "http://localhost:9996"
-
-# [auth.keycloak]
-# use_server_based_check = true
-# home = "http://localhost:9091"
-# client_id = "some_client_id"
-# client_secret = "some_client_secret_at_least_512_bytes_long"
-# public_key = "some_public_key"
-# endpoint = "some_endpoint"
-# realm = "some_realm"
+asaa_home = "http://localhost:9090/"
 
 [auth.keycloak]
 use_server_based_check = true
-home = "http://localhost:9997"
+home = "http://localhost:9091/"
 client_id = "some_client_id"
-client_secret = "35cTMk4PgNgcmK9LOsbFWcqy76qtUkKy"
-public_key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4oRys5sBvxxsw83i36IO9oHQ01Y/BscmDPEnYFbExph3LqqZaqDBzvniQsCn7lp9MTteL9BOzENZlPuHEeBeLmFrQUy2wRpOERXmy3uDZ5wHBE8Zg6qqrcCFdg6h74loRgR2hSs+8pp+TPOdXWfzRybeXbaFjm3XNI0eLCqSmdcta9kfgNeH650hgSC5bMuG6m/CIY425YpafJkIsnGBOSltT4I4mSEm9d6R7OgovS+ZXMjVpHflySQCTCg4EDOmD+Y9blNe3g+naUX8YK4zFjw63hS8ch+6qypvUF3HN6ToLVBg7xFi9uel+/NthIBIrEcKaLQ2szFJreKcdJzJfwIDAQAB"
+client_secret = "some_client_secret"
+public_key = "some_public_key"
 endpoint = "some_endpoint"
 realm = "some_realm"

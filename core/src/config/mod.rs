@@ -5,7 +5,7 @@ use crate::error::Result;
 use chat::models::Platform;
 use db::connect::CoreDbSettings;
 use db::core_schema::ApiId;
-use llm_client::config::{LlmClientCfg, LlmRequestCfg};
+use llm::config::AiomniLlmConfig;
 use queue::config::QueueConfig;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -84,13 +84,6 @@ impl ChatConfig {
     }
 }
 
-/// Структура конфигурации ЛЛМ.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct LlmConfig {
-    request: LlmRequestCfg,
-    client: LlmClientCfg,
-}
-
 /// Настройки Consul.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct ConsulConfig {
@@ -109,7 +102,7 @@ pub struct Config {
     consul: ConsulConfig,
     core: CoreSettings,
     db: CoreDbSettings,
-    llm: LlmConfig,
+    llm: AiomniLlmConfig,
     queue: QueueConfig,
 }
 
@@ -193,11 +186,8 @@ impl Config {
     pub(super) fn db(&self) -> &CoreDbSettings {
         &self.db
     }
-    pub(super) fn llm_client(&self) -> &LlmClientCfg {
-        &self.llm.client
-    }
-    pub(super) fn llm_req(&self) -> &LlmRequestCfg {
-        &self.llm.request
+    pub(super) fn llm_client(&self) -> &AiomniLlmConfig {
+        &self.llm
     }
 }
 

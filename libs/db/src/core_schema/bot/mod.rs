@@ -9,7 +9,16 @@ use crate::core_schema::{CoreDbCrud, DbFullPlatform, DbPlatform, DbPlatformMirro
 use crate::error::{DbError, Result};
 
 /// Сущность проекта
-#[derive(Clone, CoreDbCrud, FromRow, PartialEq, Deserialize, Serialize)]
+#[derive(
+    Clone,
+    CoreDbCrud,
+    FromRow,
+    PartialEq,
+    Deserialize,
+    Serialize,
+    utoipa::ToSchema,
+    utoipa::ToResponse,
+)]
 #[core_db_table = "bot_account"]
 pub struct DbBotAccount {
     #[core_db_skip_insert]
@@ -237,7 +246,7 @@ impl DbFullBotAccount {
 use crate::core_schema::DbProject;
 
 /// Сущность Учётной записи бота с платформой которая ему принадлежит.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, utoipa::ToSchema, utoipa::ToResponse)]
 pub struct DbBotAccountWithMeta {
     pub account: DbBotAccount,
     pub platform: DbFullPlatform,

@@ -70,23 +70,37 @@ ___
 
 
 - [DELETE /v1/admin_api/bot/{n}](#delete-bot)
+- [DELETE /v1/admin_api/llm/project/{n}](#delete-llm-project)
 - [DELETE /v1/admin_api/project/{n}](#delete-project)
 - [DELETE /v1/admin_api/project_group/{n}](#delete-project-group)
 - [GET /v1/admin_api/bot/{n}](#get-bot)
 - [GET /v1/admin_api/frontend](#get-frontend)
+- [GET /v1/admin_api/llm/project/{n}](#get-llm-project)
+- [GET /v1/admin_api/llm/projects](#get-llm-projects)
+- [GET /v1/admin_api/llm/training/job/{n}](#get-llm-training-job)
+- [GET /v1/admin_api/llm/training/jobs_by_project{n}](#get-llm-training-job-by-project)
 - [GET /v1/admin_api/platforms](#get-platforms)
 - [GET /v1/admin_api/project/{n}/bots](#get-project-bots)
 - [GET /v1/admin_api/projects](#get-permitted-projects)
 - [GET /v1/admin_api/project_group/{n}/projects](#get-projects)
 - [GET /v1/admin_api/project_groups](#get-project_groups)
 - [POST /v1/admin_api/bot_account](#post-bot_account)
-- [PUT /v1/admin_api/bot_account](#put-bot_account)
+- [POST /v1/admin_api/llm/projects](#post-llm-projects)
+- [POST /v1/admin_api/llm/projects/adaptor](#post-llm-project-adaptor)
+- [POST /v1/admin_api/llm/projects/build_index](#post-llm-project-build-index)
+- [POST /v1/admin_api/llm/projects/dataset](#post-llm-project-dataset)
+- [POST /v1/admin_api/llm/projects/knowledge](#post-llm-project-knowledge)
+- [POST /v1/admin_api/llm/projects/questions](#post-llm-project-questions)
+- [POST /v1/admin_api/llm/projects/reload](#post-llm-project-reload)
+- [POST /v1/admin_api/llm/projects/train](#post-llm-project-train)
+- [POST /v1/admin_api/llm/training/resume/{n}](#post-llm-training-resume)
 - [POST /v1/admin_api/project](#post-project)
-- [PUT /v1/admin_api/project](#put-project)
 - [POST /v1/admin_api/project_group](#post-project_group)
+- [PUT /v1/admin_api/bot_account](#put-bot_account)
+- [PUT /v1/admin_api/llm/projects](#put-llm-projects)
+- [PUT /v1/admin_api/project](#put-project)
 - [PUT /v1/admin_api/project_group](#put-project_group)
 
-⚠️ Когда будет доработан функционал доступа, SSO и.т.д. будет
 
 **⚠️ Предварительно:** Аутентификация на методы этого АПИ потребует хедер "Authorization: Bearer {token}", где `{token}` это токен авторизации. Внутренний процесс авторизации зависит от системы конкретного заказчика с которой проходят взаимодействия.
 
@@ -150,7 +164,7 @@ ___
 ___
 #### GET frontend
 
-Достать все платформы. Работает как справочник.
+Достать страницы АПИ администратора.
 
 - Method: GET
 - Route: /v1/admin_api/frontend
@@ -290,7 +304,7 @@ ___
 ___
 #### GET project_groups
 
-Достать все проектные группы.
+Достать все проектные группы. Работает как справочник.
 
 - Method: GET
 - Route: /v1/admin_api/project_groups
@@ -371,7 +385,9 @@ ___
     {
         "group_id": integer,
         "external_id": String,
-        "name": String
+        "name": String,
+        "system_prompt": Option<String>,
+        "fallback_message": Option<String>
     }
   ```
 - Response: ОК 201
@@ -403,7 +419,9 @@ ___
         "external_id": String,
         "project_name": String,
         "created_on": [Year,Day,Hour,Minute,Second,NanoSecond],
-        "altered_on": Option<[Year,Day,Hour,Minute,Second,NanoSecond]>
+        "altered_on": Option<[Year,Day,Hour,Minute,Second,NanoSecond]>,
+        "system_prompt": Option<String>,
+        "fallback_message": Option<String>
     }
   ```
 - Response: OK 200
@@ -438,7 +456,7 @@ ___
 ___
 #### PUT project_group
 
-Обновить данные
+Обновить данные группы проектов.
 
 - Method: PUT
 - Route: /v1/admin_api/project_group
@@ -456,6 +474,368 @@ ___
   ```
 - Response: OK 200
 
+___
+### DELETE LLM Project
+
+⚠️ Не пользоваться этим методом так как возникнут расхождения с AIOmni Core - он существует чисто для тестирования запросов. Вместо него следует пользоваться [POST /v1/admin_api/project](#post-project).
+
+Удалить проект в базе данных AIOmni LLM. Идентификатор тот же что и в базе данных AIOmni Core.
+
+
+- Method: DELETE
+- Route: /v1/admin_api/llm/project/{project_id}
+- Headers: TO BE DECIDED
+- Auth: BEARER
+- URL suffix: {project_id} заменить идентификатором проекта.
+- Response: OK 200
+
+___
+### GET LLM Project
+
+Достать проект из базы данных AIOmni LLM по его идентификатору. Идентификатор тот же что и в базе данных AIOmni Core.
+
+- Method: GET
+- Route: /v1/admin_api/llm/project/{project_id}
+- Headers: TO BE DECIDED
+- Auth: BEARER
+- URL suffix: {project_id} заменить идентификатором проекта.
+- Response: OK 200
+  ```json
+    {
+        "id": i64,
+        "project_id": i64,
+        "name": String,
+        "adapter_path": Option<String>,
+        "knowledge_base_path": Option<String>,
+        "dataset_path": Option<String>,
+        "system_prompt": Option<String>,
+        "fallback_message": Option<String>,
+        "typical_question_path": Option<String>,
+        "created_at": String,
+        "updated_at": String
+    }
+  ```
+
+___
+### GET LLM Projects
+
+Достать все доступные проекты из базы данных AIOmni LLM по его идентификатору.
+
+
+- Method: GET
+- Route: /v1/admin_api/llm/projects
+- Headers: TO BE DECIDED
+- Auth: BEARER
+- URL suffix: 
+- Response: OK 200
+  ```json
+    {
+        "1": {
+            "id": i64,
+            "project_id": i64,
+            "name": String,
+            "adapter_path": Option<String>,
+            "knowledge_base_path": Option<String>,
+            "dataset_path": Option<String>,
+            "system_prompt": Option<String>,
+            "fallback_message": Option<String>,
+            "typical_question_path": Option<String>,
+            "created_at": String,
+            "updated_at": String
+        }
+    }
+  ```
+
+___
+### POST LLM Projects
+
+⚠️ Не пользоваться этим методом так как возникнут расхождения с AIOmni Core - он существует чисто для тестирования запросов. Вместо него следует пользоваться [POST /v1/admin_api/project](#post-project).
+
+Создать проект в базе данных AIOmni LLM. Идентификатор тот же что и в базе данных AIOmni Core.
+
+
+- Method: POST
+- Route: /v1/admin_api/llm/projects
+- Headers: TO BE DECIDED
+- Auth: BEARER
+- URL suffix: 
+- Request:
+  ```json
+    {
+        "project_id": i64,
+        "name": String,
+        "system_prompt": Option<String>,
+        "fallback_message": Option<String>
+    }
+- Response: OK 200
+  ```json
+    {
+        "id": i64,
+        "project_id": i64,
+        "name": String,
+        "adapter_path": Option<String>,
+        "knowledge_base_path": Option<String>,
+        "dataset_path": Option<String>,
+        "system_prompt": Option<String>,
+        "fallback_message": Option<String>,
+        "typical_question_path": Option<String>,
+        "created_at": String,
+        "updated_at": String
+    }
+  ```
+
+___
+### PUT LLM Projects
+
+⚠️ Не пользоваться этим методом так как возникнут расхождения с AIOmni Core - он существует чисто для тестирования запросов. Вместо него следует пользоваться [PUT /v1/admin_api/project](#put-project).
+
+Обновить проект в базе данных AIOmni LLM. Идентификатор тот же что и в базе данных AIOmni Core.
+
+- Method: PUT
+- Route: /v1/admin_api/llm/projects
+- Headers: TO BE DECIDED
+- Auth: BEARER
+- URL suffix: 
+- Request:
+  ```json
+    {
+        "project_id": i64,
+        "name": Option<String>,
+        "system_prompt": Option<String>,
+        "fallback_message": Option<String>
+    }
+- Response: OK 200
+  ```json
+    {
+        "id": i64,
+        "project_id": i64,
+        "name": String,
+        "adapter_path": Option<String>,
+        "knowledge_base_path": Option<String>,
+        "dataset_path": Option<String>,
+        "system_prompt": Option<String>,
+        "fallback_message": Option<String>,
+        "typical_question_path": Option<String>,
+        "created_at": String,
+        "updated_at": String
+    }
+  ```
+
+___
+### POST LLM Project Adaptor
+
+Добавить уже готовый ЛОРА адаптер дла проекта. Файл передаётся в ZIP формате.
+
+- Method: POST
+- Route: /v1/admin_api/llm/projects/adaptor
+- Headers:
+  - multipart/form-data
+- Auth: BEARER
+- URL suffix:
+- Request:
+  - Form field: `project_id`
+  - Body: LORA adaptor ZIP file
+- Response: OK 200
+  ```json
+    {
+        "operation_status": String,
+        "path": String
+    }
+  ```
+
+___
+### POST LLM Project Build Index
+
+- Method: POST
+- Route: /v1/admin_api/llm/projects/build_index
+- Headers: TO BE DECIDED
+- Auth: BEARER
+- URL suffix: 
+- Request: TODO
+  ```json
+    {
+        "key": { .. } 
+    }
+  ```
+- Response: OK 200
+  ```json
+    {
+        "operation_status": String,
+        "index_path": String
+    }
+  ```
+
+___
+### POST LLM Project Dataset
+
+Добавить набор данных для обучения модели в формате JSONL. В каждой строке JSONL, сущность Messages соответствует формату OpenAI.
+
+- Method: POST
+- Route: /v1/admin_api/llm/projects/dataset
+- Headers:
+  - multipart/form-data
+- Auth: BEARER
+- URL suffix: 
+- Request:
+  - Form field: `project_id`
+  - Form field: `file`
+  - Body: JSONL file сообщений ЛЛМ.
+- Response: OK 200
+  ```json
+    {
+        "operation_status": String,
+        "path": String
+    }
+  ```
+
+___
+### POST LLM Project Knowledge
+
+Добавить список вопросов и ответов для обучения модели. Файл передаётся в СSV формате. У файла два столбца. В первом вопросы, во втором соответствующие ответы. В первом ряду наименование столбцов, которое должно соответствовать полям заданными в полях форме `column_question` и `column_answer`.
+
+- Method: POST
+- Route: /v1/admin_api/llm/projects/knowledge
+- Headers:
+  - multipart/form-data
+- Auth: BEARER
+- URL suffix: 
+- Request:
+  - Form field: `project_id`
+  - Form field: `column_question`
+  - Form field: `column_answer`
+  - Form field: `file`
+  - Body: CSV файл. Два столбца. Первый ряд наименование столбцов. Остальное данные.
+- Response: OK 200
+  ```json
+    {
+        "operation_status": String,
+        "path": String
+    }
+  ```
+
+___
+### POST LLM Project Questions
+
+Добавить типичных вопросов для модели. Вопросы передаются в текст формате. Каждый вопрос на новой строке.
+
+- Method: POST
+- Route: /v1/admin_api/llm/projects/questions
+- Headers:
+  - multipart/form-data
+- Auth: BEARER
+- URL suffix: 
+- Request:
+  - Form field: `project_id`
+  - Form field: `file`
+  - Body: Текст файл. Один вопрос на каждый ряд.
+- Response: OK 200
+  ```json
+    {
+        "operation_status": String,
+        "path": String
+    }
+  ```
+
+___
+### POST LLM Project Reload
+
+Перезагрузка проекта
+
+- Method: POST
+- Route: /v1/admin_api/llm/projects/reload
+- Headers: TO BE DECIDED
+- Auth: BEARER
+- URL suffix: 
+- Request:
+  ```json
+    {
+        "key": { .. } 
+    }
+  ```
+- Response: OK 200
+  ```json
+    {
+        "job_id": String,
+        "status": String
+    }
+  ```
+
+___
+### POST LLM Project Train
+
+Начать обучение ЛОРА адаптера для определённого проекта.
+
+- Method: POST
+- Route: /v1/admin_api/llm/projects/train
+- Headers: TO BE DECIDED
+- Auth: BEARER
+- URL suffix: 
+- Request:
+  ```json
+    {
+        "project_id": i64,
+        "epochs": Option<i64>,
+        "learning_rate": Option<f64>,
+        "batch_size": Option<i64>,
+        "lora_r": Option<i64>,
+        "lora_alpha": Option<i64>
+    }
+  ```
+- Response: OK 200
+  ```json
+    {
+        "job_id": String,
+        "status": String
+    }
+  ```
+
+___
+### GET LLM Training Job
+
+Запрос на статус определённый задачи по обучению.
+
+- Method: GET
+- Route: /v1/admin_api/llm/training/job/{job_id}
+- Headers: TO BE DECIDED
+- Auth: BEARER
+- URL suffix: {job_id} заменить идентификатором задачи.
+- Response: OK 200
+  ```json
+    {
+        "job_id": String,
+        "status": String
+    }
+  ```
+
+___
+### GET LLM Training Job by Project
+
+Запрос на статус всех задач по обучению адаптеров для определенного проекта.
+
+- Method: GET
+- Route: /v1/admin_api/llm/training/jobs_by_project/{project_id}
+- Headers: TO BE DECIDED
+- Auth: BEARER
+- URL suffix: {project_id} заменить идентификатором проекта.
+- Response: OK 200
+  ```json
+    [{
+        "job_id": String,
+        "status": String
+    }]
+  ```
+
+___
+### POST LLM Training Resume
+
+Запрос на продолжение обучения адаптера.
+
+- Method: POST
+- Route: /v1/admin_api/llm/training/resume/{project_id}
+- Headers: TO BE DECIDED
+- Auth: BEARER
+- URL suffix: {project_id}
+- Response: OK 200
 
 ___
 ## WS API [⚠️Будет дорабатываться⚠️]

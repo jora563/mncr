@@ -13,7 +13,10 @@ use serde::Deserialize;
 use std::sync::Arc;
 use uzor_plugin::{AsaaData, PermissionReExtract};
 
-/// Достанем все проекты на которые администратор имеет разрешение.
+/// Достать все проектные группы. Работает как справочник.
+#[utoipa::path(
+    params(("Authorization" = String, Header, description = "Bearer + JWT token")),
+    responses((status = 200, body = Vec<DbProjectGroup>)))]
 #[get("/project_groups")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn get_project_groups(data: Data<Arc<CoreCtx>>) -> impl Responder {
@@ -23,6 +26,9 @@ pub(super) async fn get_project_groups(data: Data<Arc<CoreCtx>>) -> impl Respond
         .into_response()
 }
 
+#[utoipa::path(
+    params(("Authorization" = String, Header, description = "Bearer + JWT token")),
+    responses((status = 200, body = String)))]
 #[delete("/project_group/{id}")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn delete_project_group(
@@ -35,6 +41,10 @@ pub(super) async fn delete_project_group(
         .into_response_with_code(StatusCode::OK)
 }
 
+/// Добавить новую группу проектов.
+#[utoipa::path(
+    params(("Authorization" = String, Header, description = "Bearer + JWT token")),
+    responses((status = 200, body = DbProjectGroup)))]
 #[post("/project_group")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn post_new_project_group(
@@ -47,6 +57,10 @@ pub(super) async fn post_new_project_group(
         .into_response_with_code(StatusCode::CREATED)
 }
 
+/// Обновить данные группы проектов.
+#[utoipa::path(
+    params(("Authorization" = String, Header, description = "Bearer + JWT token")),
+    responses((status = 200, body = String)))]
 #[put("/project_group")]
 pub(super) async fn post_update_project_group(
     req: HttpRequest,
@@ -105,7 +119,7 @@ async fn post_update_project_group_inner(
     proj_group.update(pool).await.map_err(Into::into)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(serde::Serialize))]
 #[serde(deny_unknown_fields)]
 pub(crate) struct IncomingNewProjectGroup {

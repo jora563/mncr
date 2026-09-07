@@ -4,7 +4,7 @@ blocking_threads = 2
 log_level = "info"
 record_logs = true
 log_dir = "target/tmp"
-server_port = 8081
+server_port = 8787
 server_worker_count = 1
 server_max_blocking_threads = 1
 operator_idle_timeout_s = 300
@@ -28,7 +28,7 @@ acquire_timeout_s = 30
 max_lifetime_s = 3600
 idle_timeout_s = 60
 db_host_url = "localhost"
-db_name = "ai_omni_server_admin_test_db_0"
+db_name = "ai_omni_server_llm_test_db_0"
 migrations_home = "sql/core/"
 user = "aio_core"
 pw = "password"
@@ -49,14 +49,14 @@ acquire_timeout_s = 30
 max_lifetime_s = 3600
 idle_timeout_s = 60
 db_host_url = "localhost"
-db_name = "ai_omni_server_admin_test_db_0"
-migrations_home = "sql/queue/"
+db_name = "ai_omni_server_llm_test_db_0"
+migrations_home = "sql/queue/"           # a limitation of our tests for now.
 user = "aio_core"
 pw = "password"
 
 [auth]
 # asaa_home = "https://tc-asaa.telecontact.ru"
-asaa_home = "http://localhost:9996"
+asaa_home = "http://localhost:9090"
 
 # [auth.keycloak]
 # use_server_based_check = true
@@ -69,7 +69,7 @@ asaa_home = "http://localhost:9996"
 
 [auth.keycloak]
 use_server_based_check = true
-home = "http://localhost:9997"
+home = "http://localhost:9090"
 client_id = "some_client_id"
 client_secret = "35cTMk4PgNgcmK9LOsbFWcqy76qtUkKy"
 public_key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4oRys5sBvxxsw83i36IO9oHQ01Y/BscmDPEnYFbExph3LqqZaqDBzvniQsCn7lp9MTteL9BOzENZlPuHEeBeLmFrQUy2wRpOERXmy3uDZ5wHBE8Zg6qqrcCFdg6h74loRgR2hSs+8pp+TPOdXWfzRybeXbaFjm3XNI0eLCqSmdcta9kfgNeH650hgSC5bMuG6m/CIY425YpafJkIsnGBOSltT4I4mSEm9d6R7OgovS+ZXMjVpHflySQCTCg4EDOmD+Y9blNe3g+naUX8YK4zFjw63hS8ch+6qypvUF3HN6ToLVBg7xFi9uel+/NthIBIrEcKaLQ2szFJreKcdJzJfwIDAQAB"

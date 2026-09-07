@@ -8,6 +8,11 @@ use db::core_schema::*;
 use std::ops::Deref;
 use std::sync::Arc;
 
+/// Достать все платформы. Работает как справочник.
+#[utoipa::path(
+    params(("Authorization" = String, Header, description = "Bearer + JWT token")),
+    responses((status = 200, body = Vec<DbFullPlatform>))
+)]
 #[get("/platforms")]
 #[tracing::instrument(skip(data))]
 pub(super) async fn get_platforms(data: Data<Arc<CoreCtx>>) -> impl Responder {
